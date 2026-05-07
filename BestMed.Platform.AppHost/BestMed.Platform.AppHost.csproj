@@ -1,0 +1,21 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.0">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>1fd80012-5ff4-480c-b763-1f39c1b3dbab</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BestMed.AuthenticateService\BestMed.AuthenticateService.csproj" />
+    <ProjectReference Include="..\BestMed.Gateway\BestMed.Gateway.csproj" />
+    <ProjectReference Include="..\BestMed.UserService\BestMed.UserService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
+  </ItemGroup>
+
+</Project>

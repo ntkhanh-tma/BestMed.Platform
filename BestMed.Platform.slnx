@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/Apps/">
+    <Project Path="BestMed.Platform.AppHost/BestMed.Platform.AppHost.csproj" />
+  </Folder>
+  <Folder Name="/Services/">
+    <Project Path="BestMed.AuthenticateService/BestMed.AuthenticateService.csproj" />
+    <Project Path="BestMed.Gateway/BestMed.Gateway.csproj" />
+    <Project Path="BestMed.UserService/BestMed.UserService.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="BestMed.Platform.ServiceDefaults/BestMed.Platform.ServiceDefaults.csproj" />
+    <Project Path="BestMed.Common/BestMed.Common.csproj" />
+    <Project Path="BestMed.Data/BestMed.Data.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="BestMed.Platform.Tests/BestMed.Platform.Tests.csproj" />
+  </Folder>
+</Solution>
