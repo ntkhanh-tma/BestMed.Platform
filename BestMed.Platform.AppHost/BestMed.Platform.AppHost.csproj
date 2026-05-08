@@ -12,10 +12,12 @@
     <ProjectReference Include="..\BestMed.AuthenticateService\BestMed.AuthenticateService.csproj" />
     <ProjectReference Include="..\BestMed.Gateway\BestMed.Gateway.csproj" />
     <ProjectReference Include="..\BestMed.UserService\BestMed.UserService.csproj" />
+    <ProjectReference Include="..\BestMed.RoleService\BestMed.RoleService.csproj" />
+    <ProjectReference Include="..\BestMed.PrescriberService\BestMed.PrescriberService.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.ServiceBus" Version="13.1.0" />
   </ItemGroup>
 
 </Project>

@@ -67,6 +67,8 @@ BestMed.Platform/
 ├── BestMed.Gateway/                  # YARP reverse proxy (external entry point)
 ├── BestMed.AuthenticateService/      # Authentication & token issuance
 ├── BestMed.UserService/              # User management CRUD
+├── BestMed.RoleService/              # Role management
+├── BestMed.PrescriberService/        # Prescriber management
 └── BestMed.Platform.Tests/            # Integration tests
 ```
 
@@ -105,7 +107,8 @@ Contains base classes and interfaces that enforce database conventions automatic
 | `Entities/IEntity` | Marker interface — all entities have a `Guid Id` |
 | `Entities/IAuditable` | `CreatedAt` / `UpdatedAt` — auto-stamped on `SaveChanges` |
 | `Entities/ISoftDeletable` | `IsDeleted` / `DeletedAt` — global query filter applied automatically; `Remove()` intercepted as a soft-delete |
-| `BestMedDbContext` | Abstract base `DbContext` that applies all the above conventions |
+| `BestMedDbContext` | Abstract base `DbContext` for read-write operations — applies all the above conventions |
+| `BestMedReadOnlyDbContext` | Abstract base `DbContext` for read-only operations — disables change tracking and blocks `SaveChanges` |
 
 #### `BestMed.Gateway` — API Gateway
 
@@ -130,15 +133,55 @@ Issues and validates JWTs. Delegates credential verification to an external auth
 
 #### `BestMed.UserService` — User Management
 
-Database-first EF Core service against Azure SQL. Entities implement `IEntity` and `IAuditable` for automatic conventions.
+Database-first EF Core service against Azure SQL `[dbo].[User]`. Supports read/write separation via `UserDbContext` (write) and `ReadOnlyUserDbContext` (read).
 
 | Endpoint | Rate Limit | Cache | Description |
 |----------|------------|-------|-------------|
-| `GET /users/{id}` | Light | `short` (30 s) | Get user by ID with addresses |
-| `GET /users/external/{externalId}` | Light | `short` (30 s) | Get user by external identity ID |
-| `GET /users` | Standard | `query` (15 s) | Search/filter with pagination |
+| `GET /users/{id}` | Light | `short` (30 s) | Get full user detail by ID |
+| `GET /users/external/{externalId}` | Light | `short` (30 s) | Get user by external identity provider ID |
+| `GET /users` | Standard | `query` (15 s) | Search/filter with pagination (email, name, type, status, role) |
 | `PUT /users/{id}` | Standard | Evicts `users` tag | Update a single user |
 | `PUT /users/bulk` | Heavy | Evicts `users` tag | Bulk update multiple users |
+
+#### `BestMed.RoleService` — Role Management
+
+Database-first EF Core service against Azure SQL `[dbo].[UserRole]`. Supports read/write separation via `RoleDbContext` (write) and `ReadOnlyRoleDbContext` (read).
+
+| Endpoint | Rate Limit | Cache | Description |
+|----------|------------|-------|-------------|
+| `GET /roles/{id}` | Light | `short` (30 s) | Get a role by ID |
+| `GET /roles` | Standard | `query` (15 s) | Search/filter roles with pagination (roleCode, roleName, userTypeId) |
+| `PUT /roles/{id}` | Standard | Evicts `roles` tag | Update a single role |
+
+#### `BestMed.PrescriberService` — Prescriber Management
+
+Database-first EF Core service against Azure SQL `[dbo].[Prescriber]`. Supports read/write separation via `PrescriberDbContext` (write) and `ReadOnlyPrescriberDbContext` (read).
+
+| Endpoint | Rate Limit | Cache | Description |
+|----------|------------|-------|-------------|
+| `GET /prescribers/{id}` | Light | `short` (30 s) | Get a prescriber by ID |
+| `GET /prescribers` | Standard | `query` (15 s) | Search/filter prescribers with pagination (name, code, AHPRA, email) |
+| `PUT /prescribers/{id}` | Standard | Evicts `prescribers` tag | Update a single prescriber |
+
+#### `BestMed.RoleService` — Role Management
+
+Database-first EF Core service against Azure SQL `[dbo].[UserRole]`. Supports read/write separation via `RoleDbContext` (write) and `ReadOnlyRoleDbContext` (read).
+
+| Endpoint | Rate Limit | Cache | Description |
+|----------|------------|-------|-------------|
+| `GET /roles/{id}` | Light | `short` (30 s) | Get a role by ID |
+| `GET /roles` | Standard | `query` (15 s) | Search/filter roles with pagination (roleCode, roleName, userTypeId) |
+| `PUT /roles/{id}` | Standard | Evicts `roles` tag | Update a single role |
+
+#### `BestMed.PrescriberService` — Prescriber Management
+
+Database-first EF Core service against Azure SQL `[dbo].[Prescriber]`. Supports read/write separation via `PrescriberDbContext` (write) and `ReadOnlyPrescriberDbContext` (read).
+
+| Endpoint | Rate Limit | Cache | Description |
+|----------|------------|-------|-------------|
+| `GET /prescribers/{id}` | Light | `short` (30 s) | Get a prescriber by ID |
+| `GET /prescribers` | Standard | `query` (15 s) | Search/filter prescribers with pagination (name, code, AHPRA, email) |
+| `PUT /prescribers/{id}` | Standard | Evicts `prescribers` tag | Update a single prescriber |
 
 #### `BestMed.Platform.Tests` — Integration Tests
 
@@ -179,7 +222,7 @@ Aspire-based integration tests that spin up the full distributed application.
    var builder = WebApplication.CreateBuilder(args);
 
    builder.AddServiceDefaults();
-   // Add service-specific registrations here
+   builder.AddMyNewServiceDefaults(); // Service-specific registrations
 
    var app = builder.Build();
 
@@ -192,7 +235,22 @@ Aspire-based integration tests that spin up the full distributed application.
    app.Run();
    ```
 
-4. **Register in the AppHost** (`BestMed.Platform.AppHost/AppHost.cs`):
+4. **Create `ServiceRegistration.cs`** to keep `Program.cs` lean:
+
+   ```csharp
+   namespace BestMed.MyNewService;
+
+   public static class ServiceRegistration
+   {
+       public static IHostApplicationBuilder AddMyNewServiceDefaults(this IHostApplicationBuilder builder)
+       {
+           // Register DbContexts, HttpClients, and other service-specific dependencies here
+           return builder;
+       }
+   }
+   ```
+
+5. **Register in the AppHost** (`BestMed.Platform.AppHost/AppHost.cs`):
 
    ```csharp
    // Add a project reference to the AppHost .csproj first:
@@ -200,9 +258,11 @@ Aspire-based integration tests that spin up the full distributed application.
 
    var myService = builder.AddProject<Projects.BestMed_MyNewService>("mynewservice")
        .WithHttpHealthCheck("/health");
+
+   // Then add .WithReference(myService) and .WaitFor(myService) to the gateway declaration.
    ```
 
-5. **Add a YARP route** in `BestMed.Gateway/appsettings.json` if the service needs external access:
+6. **Add a YARP route** in `BestMed.Gateway/appsettings.json` if the service needs external access:
 
    ```json
    "mynew-route": {
@@ -221,10 +281,18 @@ Aspire-based integration tests that spin up the full distributed application.
    }
    ```
 
-6. **Add `appsettings.json`** with JWT config (required by ServiceDefaults):
+6. **Add `appsettings.json`** with JWT config and EF logging (required by `AddServiceDefaults()`):
 
    ```json
    {
+     "Logging": {
+       "LogLevel": {
+         "Default": "Information",
+         "Microsoft.AspNetCore": "Warning",
+         "Microsoft.EntityFrameworkCore": "Warning"
+       }
+     },
+     "AllowedHosts": "*",
      "Jwt": {
        "Issuer": "BestMed",
        "Audience": "BestMed.Services",
@@ -314,9 +382,18 @@ Supported environments: `Development`, `UAT`, `Production`.
 ### Architecture Decisions
 
 - **Database-first** approach — the database schema is the source of truth.
-- **One database per service** — each microservice owns its data store (e.g., `BestMedUsers` for `UserService`).
+- **One database per service** — each microservice owns its data store.
 - **Azure SQL Database** for all environments (no local SQL containers).
 - **Azure AD authentication** — connection strings use `Authentication=Active Directory Default`.
+- **Read/write separation** — every service has a read-write context and a read-only context with its own connection string (see [Read/Write Database Separation](#readwrite-database-separation)).
+
+### Service Database Inventory
+
+| Service | Database | Read-Write Context | Read-Only Context | Connection String Keys |
+|---------|----------|--------------------|-------------------|------------------------|
+| `UserService` | `BestMedUsers` | `UserDbContext` | `ReadOnlyUserDbContext` | `userdb`, `userdb-readonly` |
+| `RoleService` | `BestMedRoles` | `RoleDbContext` | `ReadOnlyRoleDbContext` | `roledb`, `roledb-readonly` |
+| `PrescriberService` | `BestMedPrescribers` | `PrescriberDbContext` | `ReadOnlyPrescriberDbContext` | `prescriberdb`, `prescriberdb-readonly` |
 
 ### Setting Up a New Database
 
@@ -343,10 +420,13 @@ Supported environments: `Development`, `UAT`, `Production`.
    ```json
    {
      "ConnectionStrings": {
-       "mynewdb": "Server=bestmed-dev.database.windows.net;Database=BestMedMyNewDb;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;"
+       "mynewdb": "Server=bestmed-dev.database.windows.net;Database=BestMedMyNewDb;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;",
+       "mynewdb-readonly": "Server=bestmed-dev.database.windows.net;Database=BestMedMyNewDb;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;"
      }
    }
    ```
+
+   > **Note:** Both keys can point to the same server until a read replica is provisioned.
 
 4. **Register with Aspire** in `Program.cs`:
 
@@ -356,6 +436,65 @@ Supported environments: `Development`, `UAT`, `Production`.
        settings.DisableHealthChecks = true;
    });
    ```
+
+### Read/Write Database Separation
+
+The platform supports separating database access into **read-only** and **read-write** connections (e.g., to route reads to a replica). This is implemented via two base DbContext classes in `BestMed.Data`:
+
+- **`BestMedDbContext`** — for write operations (insert, update, delete). Includes audit stamping and soft-delete interception.
+- **`BestMedReadOnlyDbContext`** — for read operations only. Disables change tracking and throws if `SaveChanges` is called.
+
+#### Applying to a Service
+
+1. **Create a read-only DbContext** inheriting from `BestMedReadOnlyDbContext`:
+
+   ```csharp
+   public class ReadOnlyMyDbContext : BestMedReadOnlyDbContext
+   {
+       public ReadOnlyMyDbContext(DbContextOptions<ReadOnlyMyDbContext> options) : base(options) { }
+
+       public DbSet<MyEntity> MyEntities { get; set; } = null!;
+
+       protected override void OnModelCreating(ModelBuilder modelBuilder)
+       {
+           base.OnModelCreating(modelBuilder);
+           modelBuilder.ApplyConfigurationsFromAssembly(typeof(MyDbContext).Assembly);
+       }
+   }
+   ```
+
+2. **Register both contexts** in `Program.cs` with separate Aspire connection names:
+
+   ```csharp
+   // Read-write context
+   builder.AddSqlServerDbContext<MyDbContext>("mydb", configureSettings: settings =>
+   {
+       settings.DisableHealthChecks = true;
+   });
+
+   // Read-only context (separate connection string for read replica)
+   builder.AddSqlServerDbContext<ReadOnlyMyDbContext>("mydb-readonly", configureSettings: settings =>
+   {
+       settings.DisableHealthChecks = true;
+   });
+   ```
+
+3. **Inject the appropriate context** in your endpoints:
+   - Read endpoints (GET) → inject the read-only context
+   - Write endpoints (POST/PUT/DELETE) → inject the read-write context
+
+4. **Add the connection string** for the read replica in `appsettings.{Environment}.json`:
+
+   ```json
+   {
+     "ConnectionStrings": {
+       "mydb": "Server=bestmed-dev.database.windows.net;Database=BestMedMyDb;...",
+       "mydb-readonly": "Server=bestmed-dev-replica.database.windows.net;Database=BestMedMyDb;..."
+     }
+   }
+   ```
+
+   > **Tip:** If no read replica is available, you can point both connection strings to the same server.
 
 ### Scaffolding Entities (Database-First)
 
@@ -607,3 +746,295 @@ When scaling to multiple instances, switch from in-memory output cache to Redis:
 5. Call `builder.AddRedisOutputCache("redis");` after `AddServiceDefaults()` in each service's `Program.cs`.
 
 No endpoint code changes are needed — cache policies, tags, and eviction calls remain identical.
+
+
+---
+
+## VI. Inter-Service Communication
+
+The platform uses **two complementary patterns** for services to talk to each other. The rule for choosing is simple:
+
+```
+Need data NOW to complete a response?
+  └─ YES → Direct HTTP  (typed client + caching decorator)
+  └─ NO  → Did something happen that others should react to?
+              └─ YES → Azure Service Bus (publish an integration event)
+```
+
+Never use HTTP for fire-and-forget notifications, and never use Service Bus when a caller needs to block on a result.
+
+### Decision Matrix
+
+| Scenario | Pattern | Reason |
+|----------|---------|--------|
+| Service A needs data from Service B to build its response | **HTTP** | Synchronous — the caller must block until it has the data |
+| Service A changes something and other services should react | **Service Bus** | Async fan-out — no single consumer; each subscriber reacts independently |
+| Cache invalidation after a write in another service | **Service Bus** | The source service should not know or care who is caching its data |
+| Auditing, notifications, or workflow triggers | **Service Bus** | Loose coupling — new consumers can be added without changing the publisher |
+
+### Current Event Inventory
+
+| Topic | Publisher | Subscription | Subscriber | Purpose |
+|-------|-----------|--------------|------------|---------|
+| `role-updated` | RoleService | `userservice-role-updated` | UserService | Invalidate the in-memory role cache |
+| `prescriber-updated` | PrescriberService | `userservice-prescriber-updated` | UserService | Invalidate the in-memory prescriber cache |
+| `user-status-changed` | UserService | *(none yet)* | *(future consumers)* | Notify downstream services when a user is activated/deactivated |
+
+### Shared Contracts
+
+Cross-service DTOs live in `BestMed.Common/Contracts/` — **never reference another service's internal DTOs directly**. This avoids circular project dependencies and keeps each service independently deployable.
+
+| Contract | Used By | Matches |
+|----------|---------|---------|
+| `RoleContract` | UserService HTTP client | RoleService `/roles/{id}` response shape |
+| `PrescriberContract` | UserService HTTP client | PrescriberService `/prescribers/{id}` response shape |
+
+When adding a new cross-service HTTP client, add its response contract here first.
+
+---
+
+### Pattern 1 — Direct HTTP (Synchronous Queries)
+
+Used when a service needs live data from another service **within the same request/response cycle**.
+
+Every HTTP client follows this layered structure:
+
+```
+Endpoint
+  └─ IMyServiceClient              (interface — injected into endpoint)
+       └─ CachingMyServiceClient   (decorator — IMemoryCache, 5 min TTL)
+            └─ MyServiceClient     (HttpClient — Aspire service discovery)
+```
+
+#### Step-by-step: adding an HTTP client to a new consuming service
+
+**Step 1** — Add a shared contract to `BestMed.Common/Contracts/` if one does not exist yet:
+
+```csharp
+// BestMed.Common/Contracts/UserContract.cs
+namespace BestMed.Common.Contracts;
+
+public sealed record UserContract
+{
+    public Guid Id { get; init; }
+    public string? Email { get; init; }
+    public bool IsActive { get; init; }
+}
+```
+
+**Step 2** — Create the interface and HTTP client inside the consuming service:
+
+```csharp
+// BestMed.MyService/Clients/IUserServiceClient.cs
+using BestMed.Common.Contracts;
+
+public interface IUserServiceClient
+{
+    Task<UserContract?> GetUserByIdAsync(Guid userId, CancellationToken ct = default);
+}
+
+// BestMed.MyService/Clients/UserServiceClient.cs
+internal sealed class UserServiceClient(HttpClient httpClient) : IUserServiceClient
+{
+    public async Task<UserContract?> GetUserByIdAsync(Guid userId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await httpClient.GetFromJsonAsync<UserContract>($"/users/{userId}", ct);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+}
+```
+
+**Step 3** — Add a caching decorator:
+
+```csharp
+// BestMed.MyService/Clients/CachingUserServiceClient.cs
+internal sealed class CachingUserServiceClient(IUserServiceClient inner, IMemoryCache cache)
+    : IUserServiceClient
+{
+    private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+
+    public async Task<UserContract?> GetUserByIdAsync(Guid userId, CancellationToken ct = default)
+        => await cache.GetOrCreateAsync($"users:{userId}", async e =>
+        {
+            e.AbsoluteExpirationRelativeToNow = Ttl;
+            return await inner.GetUserByIdAsync(userId, ct);
+        });
+
+    // Call this from an IEventHandler when a UserStatusChangedEvent is received.
+    public static void InvalidateById(IMemoryCache cache, Guid userId)
+        => cache.Remove($"users:{userId}");
+}
+```
+
+**Step 4** — Register in the consuming service's `ServiceRegistration.cs`:
+
+```csharp
+builder.Services.AddMemoryCache(); // skip if already registered
+
+builder.Services.AddHttpClient<UserServiceClient>(c =>
+    c.BaseAddress = new Uri("https+http://userservice"));
+
+builder.Services.AddSingleton<IUserServiceClient>(sp =>
+    new CachingUserServiceClient(
+        sp.GetRequiredService<UserServiceClient>(),
+        sp.GetRequiredService<IMemoryCache>()));
+```
+
+**Step 5** — Wire the service reference in `AppHost.cs`:
+
+```csharp
+var myService = builder.AddProject<Projects.BestMed_MyService>("myservice")
+    .WithReference(userService)   // enables https+http://userservice resolution
+    .WaitFor(userService);
+```
+
+---
+
+### Pattern 2 — Azure Service Bus (Async Events)
+
+Used when a service writes data and needs to **notify other services** without knowing who they are or waiting for a response.
+
+All infrastructure is already in place:
+- `BestMed.Common/Messaging/` — `IIntegrationEvent`, `IntegrationEvent`, `IEventPublisher`, `IEventHandler<T>`
+- `BestMed.Common/Messaging/Events/` — shared event records
+- `BestMed.Platform.ServiceDefaults/Messaging/` — `ServiceBusEventPublisher`, `ServiceBusSubscriberWorker`, `MessagingExtensions`
+
+#### Publishing an event
+
+**Step 1** — Define the event in `BestMed.Common/Messaging/Events/`:
+
+```csharp
+// BestMed.Common/Messaging/Events/MyThingChangedEvent.cs
+namespace BestMed.Common.Messaging.Events;
+
+public sealed record MyThingChangedEvent : IntegrationEvent
+{
+    public required Guid ThingId { get; init; }
+    public required string? NewValue { get; init; }
+}
+```
+
+> **Naming convention:** `{Subject}{PastTenseVerb}Event` → topic = kebab-case without the `Event` suffix.
+> `MyThingChangedEvent` → topic `my-thing-changed`. Handled automatically by `MessagingExtensions.ToTopicName()`.
+
+**Step 2** — Register the publisher in the service's `ServiceRegistration.cs`:
+
+```csharp
+builder.AddServiceBusPublisher(); // registers IEventPublisher backed by Azure Service Bus
+```
+
+**Step 3** — Inject `IEventPublisher` into the endpoint and publish **after** the write commits:
+
+```csharp
+private static async Task<IResult> UpdateAsync(
+    Guid id,
+    UpdateMyThingRequest request,
+    MyDbContext db,
+    IEventPublisher eventPublisher,
+    CancellationToken ct)
+{
+    var thing = await db.Things.FindAsync([id], ct);
+    if (thing is null) return Results.NotFound();
+
+    thing.Value = request.Value;
+    await db.SaveChangesAsync(ct);   // commit first
+
+    await eventPublisher.PublishAsync(new MyThingChangedEvent
+    {
+        ThingId = thing.Id,
+        NewValue = thing.Value
+    }, ct);
+
+    return Results.Ok(thing.ToDto());
+}
+```
+
+**Step 4** — Add the topic to `AppHost.cs`:
+
+```csharp
+var serviceBus = builder.AddAzureServiceBus("servicebus")
+    .AddTopic("role-updated",        ["userservice-role-updated"])
+    .AddTopic("prescriber-updated",  ["userservice-prescriber-updated"])
+    .AddTopic("user-status-changed", [])
+    .AddTopic("my-thing-changed",    []);  // ← add your topic; fill subscriptions as consumers are created
+```
+
+**Step 5** — Add `.WithReference(serviceBus)` to the publishing service in `AppHost.cs`:
+
+```csharp
+var myService = builder.AddProject<Projects.BestMed_MyService>("myservice")
+    .WithReference(serviceBus)
+    .WaitFor(serviceBus);
+```
+
+#### Subscribing to an event
+
+**Step 1** — Add the Aspire Service Bus package to the consuming service if not already present:
+
+```powershell
+dotnet add BestMed.MyService package Aspire.Azure.Messaging.ServiceBus --version 9.3.1
+```
+
+**Step 2** — Implement `IEventHandler<TEvent>` inside the consuming service:
+
+```csharp
+// BestMed.MyService/Messaging/MyThingChangedEventHandler.cs
+using BestMed.Common.Messaging;
+using BestMed.Common.Messaging.Events;
+
+namespace BestMed.MyService.Messaging;
+
+internal sealed class MyThingChangedEventHandler(ILogger<MyThingChangedEventHandler> logger)
+    : IEventHandler<MyThingChangedEvent>
+{
+    public Task HandleAsync(MyThingChangedEvent @event, CancellationToken ct)
+    {
+        // e.g. invalidate a cache, trigger a workflow, write an audit record
+        logger.LogInformation("Thing {ThingId} changed to {Value}", @event.ThingId, @event.NewValue);
+        return Task.CompletedTask;
+    }
+}
+```
+
+**Step 3** — Register in the consuming service's `ServiceRegistration.cs`:
+
+```csharp
+builder.AddServiceBusSubscriber<MyThingChangedEvent, MyThingChangedEventHandler>(
+    subscriptionName: "myservice-my-thing-changed");
+```
+
+**Step 4** — Add the subscription name to the topic in `AppHost.cs`:
+
+```csharp
+.AddTopic("my-thing-changed", ["myservice-my-thing-changed"])
+//                              ↑ add your subscription here
+```
+
+**Step 5** — Add `.WithReference(serviceBus)` to the consuming service in `AppHost.cs`:
+
+```csharp
+var myService = builder.AddProject<Projects.BestMed_MyService>("myservice")
+    .WithReference(serviceBus)
+    .WaitFor(serviceBus);
+```
+
+`ServiceBusSubscriberWorker` starts automatically as a hosted background service. Messages are completed on success, abandoned on handler exception (allowing retry), and dead-lettered after repeated failures.
+
+### Subscription Naming Convention
+
+```
+{consuming-service-short-name}-{topic-name}
+
+Examples:
+  userservice-role-updated
+  userservice-prescriber-updated
+  authservice-user-status-changed
+```
+
+This makes it immediately clear in the Azure portal which service owns which subscription, without needing to look at code.

@@ -31,8 +31,17 @@ public sealed record UserQueryParameters
     /// <summary>Filter by active status.</summary>
     public bool? IsActive { get; init; }
 
-    /// <summary>Sort field: Email, FirstName, LastName, CreatedAt (default).</summary>
-    public string SortBy { get; init; } = "CreatedAt";
+    /// <summary>Filter by user type.</summary>
+    public string? Type { get; init; }
+
+    /// <summary>Filter by status.</summary>
+    public string? Status { get; init; }
+
+    /// <summary>Filter by role ID.</summary>
+    public Guid? RoleId { get; init; }
+
+    /// <summary>Sort field: Email, FirstName, LastName, CreatedDate (default).</summary>
+    public string SortBy { get; init; } = "CreatedDate";
 
     /// <summary>Sort direction: asc or desc (default).</summary>
     public string SortDirection { get; init; } = "desc";

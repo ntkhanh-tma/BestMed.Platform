@@ -8,11 +8,16 @@
     <Project Path="BestMed.UserService/BestMed.UserService.csproj" />
   </Folder>
   <Folder Name="/Shared/">
-    <Project Path="BestMed.Platform.ServiceDefaults/BestMed.Platform.ServiceDefaults.csproj" />
     <Project Path="BestMed.Common/BestMed.Common.csproj" />
     <Project Path="BestMed.Data/BestMed.Data.csproj" />
+    <Project Path="BestMed.Platform.ServiceDefaults/BestMed.Platform.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="BestMed.Platform.Tests/BestMed.Platform.Tests.csproj" />
   </Folder>
+  <Project Path="BestMed.PrescriberService/BestMed.PrescriberService.csproj" />
+  <Project Path="BestMed.RoleService/BestMed.RoleService.csproj" />
 </Solution>
