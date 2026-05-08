@@ -5,11 +5,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-// Register the external auth provider with a named HttpClient
+builder.Services.AddDataProtection();
+
+// Register the external auth provider with a named HttpClient pointing to the Identity Server
 builder.Services.AddHttpClient<IExternalAuthProvider, ExternalAuthProvider>(client =>
 {
-    var baseUrl = builder.Configuration["ExternalAuth:BaseUrl"]
-        ?? throw new InvalidOperationException("ExternalAuth:BaseUrl is not configured.");
+    var baseUrl = builder.Configuration["IdentityServer:BaseUrl"]
+        ?? throw new InvalidOperationException("IdentityServer:BaseUrl is not configured.");
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
