@@ -20,4 +20,5 @@
   </Folder>
   <Project Path="BestMed.PrescriberService/BestMed.PrescriberService.csproj" />
   <Project Path="BestMed.RoleService/BestMed.RoleService.csproj" />
+  <Project Path="BestMed.WarehouseService/BestMed.WarehouseService.csproj" />
 </Solution>

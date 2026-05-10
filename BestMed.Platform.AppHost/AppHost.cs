@@ -16,10 +16,16 @@ var builder = DistributedApplication.CreateBuilder(args);
 //   role-updated        → userservice-role-updated   (UserService invalidates role cache)
 //   prescriber-updated  → userservice-prescriber-updated (UserService invalidates prescriber cache)
 //   user-status-changed → (reserved for future consumers, e.g. audit/notification service)
-var serviceBus = builder.AddAzureServiceBus("servicebus")
-    .AddTopic("role-updated", ["userservice-role-updated"])
-    .AddTopic("prescriber-updated", ["userservice-prescriber-updated"])
-    .AddTopic("user-status-changed", []);
+var serviceBus = builder.AddAzureServiceBus("servicebus");
+
+serviceBus.AddServiceBusTopic("role-updated")
+    .AddServiceBusSubscription("userservice-role-updated");
+
+serviceBus.AddServiceBusTopic("prescriber-updated")
+    .AddServiceBusSubscription("userservice-prescriber-updated");
+
+serviceBus.AddServiceBusTopic("user-status-changed");
+serviceBus.AddServiceBusTopic("warehouse-updated");
 
 var authService = builder.AddProject<Projects.BestMed_AuthenticateService>("authservice")
     .WithHttpHealthCheck("/health");
@@ -39,6 +45,11 @@ var prescriberService = builder.AddProject<Projects.BestMed_PrescriberService>("
     .WithReference(serviceBus)
     .WaitFor(serviceBus);
 
+var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>("warehouseservice")
+    .WithHttpHealthCheck("/health")
+    .WithReference(serviceBus)
+    .WaitFor(serviceBus);
+
 var gateway = builder.AddProject<Projects.BestMed_Gateway>("gateway")
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
@@ -46,10 +57,12 @@ var gateway = builder.AddProject<Projects.BestMed_Gateway>("gateway")
     .WithReference(userService)
     .WithReference(roleService)
     .WithReference(prescriberService)
+    .WithReference(warehouseService)
     .WaitFor(authService)
     .WaitFor(userService)
     .WaitFor(roleService)
-    .WaitFor(prescriberService);
+    .WaitFor(prescriberService)
+    .WaitFor(warehouseService);
 
 // Angular frontend is run separately via `ng serve` (Aspire.Hosting.NodeJs has no 13.x release).
 // Run: cd bestmed-web && ng serve --proxy-config proxy.conf.json

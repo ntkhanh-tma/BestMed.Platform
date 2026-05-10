@@ -14,6 +14,7 @@
     <ProjectReference Include="..\BestMed.UserService\BestMed.UserService.csproj" />
     <ProjectReference Include="..\BestMed.RoleService\BestMed.RoleService.csproj" />
     <ProjectReference Include="..\BestMed.PrescriberService\BestMed.PrescriberService.csproj" />
+    <ProjectReference Include="..\BestMed.WarehouseService\BestMed.WarehouseService.csproj" />
   </ItemGroup>
 
   <ItemGroup>

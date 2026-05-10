@@ -69,6 +69,7 @@ BestMed.Platform/
 ├── BestMed.UserService/              # User management CRUD
 ├── BestMed.RoleService/              # Role management
 ├── BestMed.PrescriberService/        # Prescriber management
+├── BestMed.WarehouseService/         # Warehouse management
 └── BestMed.Platform.Tests/            # Integration tests
 ```
 
@@ -163,25 +164,15 @@ Database-first EF Core service against Azure SQL `[dbo].[Prescriber]`. Supports 
 | `GET /prescribers` | Standard | `query` (15 s) | Search/filter prescribers with pagination (name, code, AHPRA, email) |
 | `PUT /prescribers/{id}` | Standard | Evicts `prescribers` tag | Update a single prescriber |
 
-#### `BestMed.RoleService` — Role Management
+#### `BestMed.WarehouseService` — Warehouse Management
 
-Database-first EF Core service against Azure SQL `[dbo].[UserRole]`. Supports read/write separation via `RoleDbContext` (write) and `ReadOnlyRoleDbContext` (read).
-
-| Endpoint | Rate Limit | Cache | Description |
-|----------|------------|-------|-------------|
-| `GET /roles/{id}` | Light | `short` (30 s) | Get a role by ID |
-| `GET /roles` | Standard | `query` (15 s) | Search/filter roles with pagination (roleCode, roleName, userTypeId) |
-| `PUT /roles/{id}` | Standard | Evicts `roles` tag | Update a single role |
-
-#### `BestMed.PrescriberService` — Prescriber Management
-
-Database-first EF Core service against Azure SQL `[dbo].[Prescriber]`. Supports read/write separation via `PrescriberDbContext` (write) and `ReadOnlyPrescriberDbContext` (read).
+Database-first EF Core service against Azure SQL `[dbo].[Warehouse]` and related tables. Supports read/write separation via `WarehouseDbContext` (write) and `ReadOnlyWarehouseDbContext` (read). Child entities (`WarehouseBankDetail`, `WarehouseDocument`, `WarehouseHoliday`, `WarehouseRobot`) are loaded eagerly on single-entity GET requests.
 
 | Endpoint | Rate Limit | Cache | Description |
 |----------|------------|-------|-------------|
-| `GET /prescribers/{id}` | Light | `short` (30 s) | Get a prescriber by ID |
-| `GET /prescribers` | Standard | `query` (15 s) | Search/filter prescribers with pagination (name, code, AHPRA, email) |
-| `PUT /prescribers/{id}` | Standard | Evicts `prescribers` tag | Update a single prescriber |
+| `GET /warehouses/{id}` | Light | `short` (30 s) | Get a warehouse by ID including bank details, holidays and robots |
+| `GET /warehouses` | Standard | `query` (15 s) | Search/filter warehouses with pagination (name, suburb, state, isMultiSite) |
+| `PUT /warehouses/{id}` | Standard | Evicts `warehouses` tag | Update a single warehouse; publishes `warehouse-updated` event |
 
 #### `BestMed.Platform.Tests` — Integration Tests
 
@@ -394,6 +385,7 @@ Supported environments: `Development`, `UAT`, `Production`.
 | `UserService` | `BestMedUsers` | `UserDbContext` | `ReadOnlyUserDbContext` | `userdb`, `userdb-readonly` |
 | `RoleService` | `BestMedRoles` | `RoleDbContext` | `ReadOnlyRoleDbContext` | `roledb`, `roledb-readonly` |
 | `PrescriberService` | `BestMedPrescribers` | `PrescriberDbContext` | `ReadOnlyPrescriberDbContext` | `prescriberdb`, `prescriberdb-readonly` |
+| `WarehouseService` | `BestMedWarehouses` | `WarehouseDbContext` | `ReadOnlyWarehouseDbContext` | `warehousedb`, `warehousedb-readonly` |
 
 ### Setting Up a New Database
 
@@ -779,6 +771,7 @@ Never use HTTP for fire-and-forget notifications, and never use Service Bus when
 | `role-updated` | RoleService | `userservice-role-updated` | UserService | Invalidate the in-memory role cache |
 | `prescriber-updated` | PrescriberService | `userservice-prescriber-updated` | UserService | Invalidate the in-memory prescriber cache |
 | `user-status-changed` | UserService | *(none yet)* | *(future consumers)* | Notify downstream services when a user is activated/deactivated |
+| `warehouse-updated` | WarehouseService | *(none yet)* | *(future consumers)* | Notify downstream services when warehouse data changes |
 
 ### Shared Contracts
 
