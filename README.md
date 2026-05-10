@@ -1022,12 +1022,12 @@ var myService = builder.AddProject<Projects.BestMed_MyService>("myservice")
 ### Subscription Naming Convention
 
 ```
-{consuming-service-short-name}-{topic-name}
+{consuming-service-kebab-name}-{topic-name}
 
 Examples:
-  userservice-role-updated
-  userservice-prescriber-updated
-  authservice-user-status-changed
+  user-service-role-updated
+  user-service-prescriber-updated
+  auth-service-user-status-changed
 ```
 
 This makes it immediately clear in the Azure portal which service owns which subscription, without needing to look at code.

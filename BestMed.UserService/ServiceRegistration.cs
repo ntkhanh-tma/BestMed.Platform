@@ -33,10 +33,10 @@ public static class ServiceRegistration
         // Aspire service discovery resolves the addresses; resilience handler adds retries.
 
         builder.Services.AddHttpClient<RoleServiceClient>(client =>
-            client.BaseAddress = new Uri("https+http://roleservice"));
+            client.BaseAddress = new Uri("https+http://role-service"));
 
         builder.Services.AddHttpClient<PrescriberServiceClient>(client =>
-            client.BaseAddress = new Uri("https+http://prescriberservice"));
+            client.BaseAddress = new Uri("https+http://prescriber-service"));
 
         // Register caching decorators as the resolved interface.
         builder.Services.AddSingleton<IRoleServiceClient>(sp =>
@@ -59,10 +59,10 @@ public static class ServiceRegistration
         // invalidates its local cache so the next HTTP call fetches fresh data.
 
         builder.AddServiceBusSubscriber<RoleUpdatedEvent, RoleUpdatedEventHandler>(
-            subscriptionName: "userservice-role-updated");
+            subscriptionName: "user-service-role-updated");
 
         builder.AddServiceBusSubscriber<PrescriberUpdatedEvent, PrescriberUpdatedEventHandler>(
-            subscriptionName: "userservice-prescriber-updated");
+            subscriptionName: "user-service-prescriber-updated");
 
         return builder;
     }

@@ -13,39 +13,39 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // ── Azure Service Bus ─────────────────────────────────────────────────────────
 // Topics and their service-specific subscriptions:
-//   role-updated        → userservice-role-updated   (UserService invalidates role cache)
-//   prescriber-updated  → userservice-prescriber-updated (UserService invalidates prescriber cache)
+//   role-updated        → user-service-role-updated      (UserService invalidates role cache)
+//   prescriber-updated  → user-service-prescriber-updated (UserService invalidates prescriber cache)
 //   user-status-changed → (reserved for future consumers, e.g. audit/notification service)
 var serviceBus = builder.AddAzureServiceBus("servicebus");
 
 serviceBus.AddServiceBusTopic("role-updated")
-    .AddServiceBusSubscription("userservice-role-updated");
+    .AddServiceBusSubscription("user-service-role-updated");
 
 serviceBus.AddServiceBusTopic("prescriber-updated")
-    .AddServiceBusSubscription("userservice-prescriber-updated");
+    .AddServiceBusSubscription("user-service-prescriber-updated");
 
 serviceBus.AddServiceBusTopic("user-status-changed");
 serviceBus.AddServiceBusTopic("warehouse-updated");
 
-var authService = builder.AddProject<Projects.BestMed_AuthenticateService>("authservice")
+var authService = builder.AddProject<Projects.BestMed_AuthenticateService>("auth-service")
     .WithHttpHealthCheck("/health");
 
-var userService = builder.AddProject<Projects.BestMed_UserService>("userservice")
+var userService = builder.AddProject<Projects.BestMed_UserService>("user-service")
     .WithHttpHealthCheck("/health")
     .WithReference(serviceBus)
     .WaitFor(serviceBus);
 
-var roleService = builder.AddProject<Projects.BestMed_RoleService>("roleservice")
+var roleService = builder.AddProject<Projects.BestMed_RoleService>("role-service")
     .WithHttpHealthCheck("/health")
     .WithReference(serviceBus)
     .WaitFor(serviceBus);
 
-var prescriberService = builder.AddProject<Projects.BestMed_PrescriberService>("prescriberservice")
+var prescriberService = builder.AddProject<Projects.BestMed_PrescriberService>("prescriber-service")
     .WithHttpHealthCheck("/health")
     .WithReference(serviceBus)
     .WaitFor(serviceBus);
 
-var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>("warehouseservice")
+var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>("warehouse-service")
     .WithHttpHealthCheck("/health")
     .WithReference(serviceBus)
     .WaitFor(serviceBus);
