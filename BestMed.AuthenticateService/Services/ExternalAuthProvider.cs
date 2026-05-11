@@ -1,48 +1,127 @@
-using System.Net.Http.Json;
+using System.Text.Json;
 using BestMed.AuthenticateService.Models;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace BestMed.AuthenticateService.Services;
 
-public sealed class ExternalAuthProvider(HttpClient httpClient, ILogger<ExternalAuthProvider> logger) : IExternalAuthProvider
+public sealed class ExternalAuthProvider(
+    HttpClient httpClient,
+    IDataProtectionProvider dataProtection,
+    IConfiguration configuration,
+    ILogger<ExternalAuthProvider> logger) : IExternalAuthProvider
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
+
+    private readonly IDataProtector _protector = dataProtection.CreateProtector("BestMed.Auth.Tokens");
+
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("Calling external auth API for login: {Username}", request.Username);
+        logger.LogInformation("Authenticating user {Username} via Identity Server", request.Username);
 
-        var response = await httpClient.PostAsJsonAsync("/auth/login", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var clientId = configuration["IdentityServer:ClientId"]
+            ?? throw new InvalidOperationException("IdentityServer:ClientId is not configured.");
+        var scope = configuration["IdentityServer:Scope"] ?? "api";
 
-        var result = await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("External auth API returned an empty response.");
+        var formData = new Dictionary<string, string>
+        {
+            ["grant_type"] = "password",
+            ["client_id"] = clientId,
+            ["username"] = request.Username,
+            ["password"] = request.Password,
+            ["scope"] = scope
+        };
 
-        logger.LogInformation("Login successful for {Username}, token expires at {ExpiresAt}", request.Username, result.ExpiresAt);
-        return result;
+        var response = await httpClient.PostAsync("/connect/token", new FormUrlEncodedContent(formData), cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning("Identity Server login failed for {Username}: {StatusCode} {Error}",
+                request.Username, response.StatusCode, errorBody);
+
+            throw new HttpRequestException(
+                $"Identity Server authentication failed: {errorBody}",
+                null,
+                response.StatusCode);
+        }
+
+        var tokenResponse = await response.Content.ReadFromJsonAsync<IdentityTokenResponse>(JsonOptions, cancellationToken)
+            ?? throw new InvalidOperationException("Identity Server returned an empty response.");
+
+        logger.LogInformation("Login successful for {Username}, token expires in {ExpiresIn}s", request.Username, tokenResponse.ExpiresIn);
+
+        return new AuthResponse
+        {
+            AccessToken = _protector.Protect(tokenResponse.AccessToken),
+            RefreshToken = tokenResponse.RefreshToken is not null ? _protector.Protect(tokenResponse.RefreshToken) : null,
+            ExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
+            TokenType = tokenResponse.TokenType,
+            PasswordExpiredDayLeft = tokenResponse.PasswordExpiredDayLeft
+        };
     }
 
-    public async Task LogoutAsync(string accessToken, CancellationToken cancellationToken = default)
+    public Task LogoutAsync(string accessToken, CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("Calling external auth API for logout");
+        logger.LogInformation("Logout requested — discarding token (no server-side revocation)");
 
-        var request = new HttpRequestMessage(HttpMethod.Post, "/auth/logout");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-
-        var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        logger.LogInformation("Logout successful");
+        // Per Identity Server docs: tokens are self-contained JWTs with no server-side revocation endpoint.
+        // The client should discard the access token and refresh token.
+        return Task.CompletedTask;
     }
 
-    public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
+    public async Task<AuthResponse> RefreshTokenAsync(string protectedRefreshToken, CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("Calling external auth API to refresh token");
+        logger.LogInformation("Refreshing token via Identity Server");
 
-        var response = await httpClient.PostAsJsonAsync("/auth/refresh", new { refreshToken }, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var refreshToken = _protector.Unprotect(protectedRefreshToken);
 
-        var result = await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("External auth API returned an empty response.");
+        var clientId = configuration["IdentityServer:ClientId"]
+            ?? throw new InvalidOperationException("IdentityServer:ClientId is not configured.");
 
-        logger.LogInformation("Token refresh successful, new token expires at {ExpiresAt}", result.ExpiresAt);
-        return result;
+        var formData = new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = clientId,
+            ["refresh_token"] = refreshToken
+        };
+
+        var response = await httpClient.PostAsync("/connect/token", new FormUrlEncodedContent(formData), cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogWarning("Identity Server token refresh failed: {StatusCode} {Error}", response.StatusCode, errorBody);
+
+            throw new HttpRequestException(
+                $"Token refresh failed: {errorBody}",
+                null,
+                response.StatusCode);
+        }
+
+        var tokenResponse = await response.Content.ReadFromJsonAsync<IdentityTokenResponse>(JsonOptions, cancellationToken)
+            ?? throw new InvalidOperationException("Identity Server returned an empty response.");
+
+        logger.LogInformation("Token refresh successful, new token expires in {ExpiresIn}s", tokenResponse.ExpiresIn);
+
+        return new AuthResponse
+        {
+            AccessToken = _protector.Protect(tokenResponse.AccessToken),
+            RefreshToken = tokenResponse.RefreshToken is not null ? _protector.Protect(tokenResponse.RefreshToken) : null,
+            ExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
+            TokenType = tokenResponse.TokenType,
+            PasswordExpiredDayLeft = tokenResponse.PasswordExpiredDayLeft
+        };
+    }
+
+    private sealed class IdentityTokenResponse
+    {
+        public required string AccessToken { get; init; }
+        public string? RefreshToken { get; init; }
+        public required string TokenType { get; init; }
+        public required int ExpiresIn { get; init; }
+        public int? PasswordExpiredDayLeft { get; init; }
     }
 }
