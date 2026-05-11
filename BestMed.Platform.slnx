@@ -15,7 +15,13 @@
     <Project Path="BestMed.Data/BestMed.Data.csproj" />
     <Project Path="BestMed.Platform.ServiceDefaults/BestMed.Platform.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="BestMed.Platform.Tests/BestMed.Platform.Tests.csproj" />
   </Folder>
+  <Project Path="BestMed.PrescriberService/BestMed.PrescriberService.csproj" />
+  <Project Path="BestMed.RoleService/BestMed.RoleService.csproj" />
+  <Project Path="BestMed.WarehouseService/BestMed.WarehouseService.csproj" />
 </Solution>

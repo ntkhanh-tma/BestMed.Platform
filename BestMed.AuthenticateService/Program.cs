@@ -1,5 +1,5 @@
+using BestMed.AuthenticateService;
 using BestMed.AuthenticateService.Endpoints;
-using BestMed.AuthenticateService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +15,7 @@ builder.Services.AddHttpClient<IExternalAuthProvider, ExternalAuthProvider>(clie
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.AddAuthServiceDefaults();
 
 var app = builder.Build();
 
