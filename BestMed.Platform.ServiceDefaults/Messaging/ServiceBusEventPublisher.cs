@@ -54,6 +54,6 @@ internal sealed class ServiceBusEventPublisher(
             ? eventTypeName[..^5]
             : eventTypeName;
 
-        return Regex.Replace(withoutSuffix, "(?<!^)([A-Z])", "-$1").ToLowerInvariant();
+        return "bmp-" + Regex.Replace(withoutSuffix, "(?<!^)([A-Z])", "-$1").ToLowerInvariant();
     }
 }

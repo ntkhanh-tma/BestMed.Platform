@@ -1,3 +1,5 @@
+using BestMed.Common.Constants;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // All environments (including local debugging) connect to an Azure SQL Database.
@@ -16,41 +18,37 @@ var builder = DistributedApplication.CreateBuilder(args);
 //   role-updated        → user-service-role-updated      (UserService invalidates role cache)
 //   prescriber-updated  → user-service-prescriber-updated (UserService invalidates prescriber cache)
 //   user-status-changed → (reserved for future consumers, e.g. audit/notification service)
-var serviceBus = builder.AddAzureServiceBus("servicebus");
+var serviceBus = builder.AddAzureServiceBus(ServiceNames.ServiceBus);
 
-serviceBus.AddServiceBusTopic("role-updated")
-    .AddServiceBusSubscription("user-service-role-updated");
+serviceBus.AddServiceBusTopic(ServiceNames.Topics.RoleUpdated)
+    .AddServiceBusSubscription(ServiceNames.Subscriptions.UserServiceRoleUpdated);
 
-serviceBus.AddServiceBusTopic("prescriber-updated")
-    .AddServiceBusSubscription("user-service-prescriber-updated");
+serviceBus.AddServiceBusTopic(ServiceNames.Topics.PrescriberUpdated)
+    .AddServiceBusSubscription(ServiceNames.Subscriptions.UserServicePrescriberUpdated);
 
-serviceBus.AddServiceBusTopic("user-status-changed");
-serviceBus.AddServiceBusTopic("warehouse-updated");
+serviceBus.AddServiceBusTopic(ServiceNames.Topics.UserStatusChanged);
+serviceBus.AddServiceBusTopic(ServiceNames.Topics.WarehouseUpdated);
 
-var authService = builder.AddProject<Projects.BestMed_AuthenticateService>("auth-service")
+var authService = builder.AddProject<Projects.BestMed_AuthenticateService>(ServiceNames.AuthService)
     .WithHttpHealthCheck("/health");
 
-var userService = builder.AddProject<Projects.BestMed_UserService>("user-service")
+var userService = builder.AddProject<Projects.BestMed_UserService>(ServiceNames.UserService)
     .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus)
-    .WaitFor(serviceBus);
+    .WithReference(serviceBus);
 
-var roleService = builder.AddProject<Projects.BestMed_RoleService>("role-service")
+var roleService = builder.AddProject<Projects.BestMed_RoleService>(ServiceNames.RoleService)
     .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus)
-    .WaitFor(serviceBus);
+    .WithReference(serviceBus);
 
-var prescriberService = builder.AddProject<Projects.BestMed_PrescriberService>("prescriber-service")
+var prescriberService = builder.AddProject<Projects.BestMed_PrescriberService>(ServiceNames.PrescriberService)
     .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus)
-    .WaitFor(serviceBus);
+    .WithReference(serviceBus);
 
-var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>("warehouse-service")
+var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>(ServiceNames.WarehouseService)
     .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus)
-    .WaitFor(serviceBus);
+    .WithReference(serviceBus);
 
-var gateway = builder.AddProject<Projects.BestMed_Gateway>("gateway")
+var gateway = builder.AddProject<Projects.BestMed_Gateway>(ServiceNames.Gateway)
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
     .WithReference(authService)

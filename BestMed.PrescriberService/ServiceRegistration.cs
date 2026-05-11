@@ -1,3 +1,6 @@
+using BestMed.Common.Constants;
+using BestMed.Common.Messaging.Events;
+using BestMed.Data;
 using BestMed.PrescriberService.Data;
 
 namespace BestMed.PrescriberService;
@@ -10,20 +13,23 @@ public static class ServiceRegistration
 {
     public static IHostApplicationBuilder AddPrescriberServiceDefaults(this IHostApplicationBuilder builder)
     {
+        // Auto-provision database on startup (Development only)
+        builder.AddDatabaseInitializer(ServiceNames.ConnectionStrings.PrescriberDb, ServiceNames.SchemaScripts.Prescribers);
+
         // Read-write context: used for update operations.
-        builder.AddSqlServerDbContext<PrescriberDbContext>("prescriberdb", configureSettings: settings =>
+        builder.AddSqlServerDbContext<PrescriberDbContext>(ServiceNames.ConnectionStrings.PrescriberDb, configureSettings: settings =>
         {
             settings.DisableHealthChecks = true;
         });
 
         // Read-only context: uses a separate connection string for read replica.
-        builder.AddSqlServerDbContext<ReadOnlyPrescriberDbContext>("prescriberdb-readonly", configureSettings: settings =>
+        builder.AddSqlServerDbContext<ReadOnlyPrescriberDbContext>(ServiceNames.ConnectionStrings.PrescriberDbReadOnly, configureSettings: settings =>
         {
             settings.DisableHealthChecks = true;
         });
 
-        // Service Bus publisher: notifies other services when prescriber data changes.
         builder.AddServiceBusPublisher();
+        builder.EnsureTopicExists<PrescriberUpdatedEvent>();
 
         return builder;
     }

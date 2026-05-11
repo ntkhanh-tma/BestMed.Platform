@@ -124,13 +124,37 @@ Also handles CORS for the Angular frontend.
 
 #### `BestMed.AuthenticateService` — Authentication
 
-Issues and validates JWTs. Delegates credential verification to an external auth provider via `IExternalAuthProvider`. Endpoints:
+Authenticates users against the **BestMed Identity Server** and returns protected tokens for subsequent authorisation. Delegates all credential verification to the Identity Server via `IExternalAuthProvider`, which calls the token endpoint directly.
+
+**Grant type used:** Resource Owner Password Credentials (ROPC) — `client_id: bestmed.homecare.mobile`
+
+**Token security:** All tokens returned to the caller are encrypted with ASP.NET Core **Data Protection** (`IDataProtector`) before leaving the service. Clients must send the protected token back on subsequent calls; the service unprotects it before forwarding to the Identity Server (e.g. on refresh).
+
+**Custom claims** decoded from the Identity Server JWT and available for downstream authorisation:
+
+| Claim | Description |
+|-------|-------------|
+| `bm_uid` | User's unique GUID |
+| `bm_utype` | User type (`Facility`, `Home Care`, `Consumer`, etc.) |
+| `bm_name` | Username |
+| `bm_firstname` / `bm_lastname` | Display name |
+| `bm_role` | Role GUID |
+
+**Password expiry:** The `PasswordExpiredDayLeft` field is included in the login response. Values ≤ 7 should prompt a password-change warning; values ≤ 0 mean the password has expired and must be changed.
 
 | Endpoint | Auth | Rate Limit | Description |
 |----------|------|------------|-------------|
-| `POST /auth/login` | Anonymous | Heavy | Authenticate and receive a JWT |
-| `POST /auth/connect` | Anonymous | Heavy | Refresh an expired token |
-| `POST /auth/logout` | Required | Standard | Revoke the current token |
+| `POST /auth/login` | Anonymous | Heavy | Authenticate via Identity Server (ROPC) and receive a protected token |
+| `POST /auth/connect` | Anonymous | Heavy | Refresh an expired token using a protected refresh token |
+| `POST /auth/logout` | Required | Standard | Discard token (no server-side revocation — tokens are self-contained JWTs) |
+
+**Configuration keys (`appsettings.json`):**
+
+| Key | Description |
+|-----|-------------|
+| `IdentityServer:BaseUrl` | Base URL of the BestMed Identity Server |
+| `IdentityServer:ClientId` | OAuth client ID (`bestmed.homecare.mobile`) |
+| `IdentityServer:Scope` | Requested scope (`api`) |
 
 #### `BestMed.UserService` — User Management
 
@@ -375,50 +399,62 @@ Supported environments: `Development`, `UAT`, `Production`.
 - **Database-first** approach — the database schema is the source of truth.
 - **One database per service** — each microservice owns its data store.
 - **Azure SQL Database** for all environments (no local SQL containers).
-- **Azure AD authentication** — connection strings use `Authentication=Active Directory Default`.
+- **SQL authentication** — connection strings use `User Id` and `Password`. Credentials are stored in User Secrets (dev) or Azure Key Vault (deployed environments).
 - **Read/write separation** — every service has a read-write context and a read-only context with its own connection string (see [Read/Write Database Separation](#readwrite-database-separation)).
+- **Automated provisioning** — `database/Setup-Database.ps1` creates databases, logins, users, and applies schemas.
+
+### Naming Conventions
+
+| Resource | Pattern | Example |
+|----------|---------|--------|
+| SQL Server | `sqls-bmp-{env}` | `sqls-bmp-dev` |
+| Database | `sqldb-bmp-{service}-{env}` | `sqldb-bmp-users-dev` |
+| App Login | `bmp-{service}-app` | `bmp-users-app` |
 
 ### Service Database Inventory
 
 | Service | Database | Read-Write Context | Read-Only Context | Connection String Keys |
 |---------|----------|--------------------|-------------------|------------------------|
-| `UserService` | `BestMedUsers` | `UserDbContext` | `ReadOnlyUserDbContext` | `userdb`, `userdb-readonly` |
-| `RoleService` | `BestMedRoles` | `RoleDbContext` | `ReadOnlyRoleDbContext` | `roledb`, `roledb-readonly` |
-| `PrescriberService` | `BestMedPrescribers` | `PrescriberDbContext` | `ReadOnlyPrescriberDbContext` | `prescriberdb`, `prescriberdb-readonly` |
-| `WarehouseService` | `BestMedWarehouses` | `WarehouseDbContext` | `ReadOnlyWarehouseDbContext` | `warehousedb`, `warehousedb-readonly` |
+| `UserService` | `sqldb-bmp-users-{env}` | `UserDbContext` | `ReadOnlyUserDbContext` | `userdb`, `userdb-readonly` |
+| `RoleService` | `sqldb-bmp-roles-{env}` | `RoleDbContext` | `ReadOnlyRoleDbContext` | `roledb`, `roledb-readonly` |
+| `PrescriberService` | `sqldb-bmp-prescribers-{env}` | `PrescriberDbContext` | `ReadOnlyPrescriberDbContext` | `prescriberdb`, `prescriberdb-readonly` |
+| `WarehouseService` | `sqldb-bmp-warehouses-{env}` | `WarehouseDbContext` | `ReadOnlyWarehouseDbContext` | `warehousedb`, `warehousedb-readonly` |
 
 ### Setting Up a New Database
 
-1. **Create the Azure SQL Database** (via portal, CLI, or IaC):
+Use the automated provisioning script:
 
-   ```powershell
-   az sql db create `
-       --resource-group bestmed-rg `
-       --server bestmed-dev `
-       --name BestMedMyNewDb `
-       --service-objective S0
-   ```
+```powershell
+cd database
 
-2. **Grant the service identity access:**
+.\Setup-Database.ps1 `
+    -ServiceName mynewservice `
+    -Environment dev `
+    -SqlAdminUser sqladmin `
+    -SqlAdminPassword 'YourAdminP@ss!' `
+    -AppUser bmp-mynewservice-app `
+    -AppPassword 'YourAppP@ss!' `
+    -ResourceGroup rg-bmp-dev
+```
 
-   ```sql
-   CREATE USER [bestmed-mynewservice] FROM EXTERNAL PROVIDER;
-   ALTER ROLE db_datareader ADD MEMBER [bestmed-mynewservice];
-   ALTER ROLE db_datawriter ADD MEMBER [bestmed-mynewservice];
-   ```
+This will:
+1. Create database `sqldb-bmp-mynewservice-dev` on `sqls-bmp-dev`
+2. Create SQL login `bmp-mynewservice-app`
+3. Grant `db_datareader` and `db_datawriter` roles
+4. Run `database/mynewservice/001_InitialSchema.sql` if it exists
 
-3. **Add the connection string** to the service's `appsettings.Development.json`:
+Then add the connection string to the service's `appsettings.Development.json`:
 
-   ```json
-   {
-     "ConnectionStrings": {
-       "mynewdb": "Server=bestmed-dev.database.windows.net;Database=BestMedMyNewDb;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;",
-       "mynewdb-readonly": "Server=bestmed-dev.database.windows.net;Database=BestMedMyNewDb;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;"
-     }
-   }
-   ```
+```json
+{
+  "ConnectionStrings": {
+    "mynewdb": "Server=sqls-bmp-dev.database.windows.net;Database=sqldb-bmp-mynewservice-dev;User Id=bmp-mynewservice-app;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=False;",
+    "mynewdb-readonly": "Server=sqls-bmp-dev.database.windows.net;Database=sqldb-bmp-mynewservice-dev;User Id=bmp-mynewservice-app;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=False;"
+  }
+}
+```
 
-   > **Note:** Both keys can point to the same server until a read replica is provisioned.
+> **Note:** Both keys can point to the same server until a read replica is provisioned.
 
 4. **Register with Aspire** in `Program.cs`:
 
@@ -480,8 +516,8 @@ The platform supports separating database access into **read-only** and **read-w
    ```json
    {
      "ConnectionStrings": {
-       "mydb": "Server=bestmed-dev.database.windows.net;Database=BestMedMyDb;...",
-       "mydb-readonly": "Server=bestmed-dev-replica.database.windows.net;Database=BestMedMyDb;..."
+       "mydb": "Server=sqls-bmp-dev.database.windows.net;Database=sqldb-bmp-myservice-dev;User Id=bmp-myservice-app;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=False;",
+       "mydb-readonly": "Server=sqls-bmp-dev-replica.database.windows.net;Database=sqldb-bmp-myservice-dev;User Id=bmp-myservice-app;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=False;"
      }
    }
    ```
@@ -716,8 +752,10 @@ For each deployed service, set these application settings:
 | `Jwt__Issuer` | `BestMed` | Double underscore for nested config |
 | `Jwt__Audience` | `BestMed.Services` | |
 | `Jwt__Key` | *(from Key Vault)* | Use Key Vault reference: `@Microsoft.KeyVault(...)` |
-| `ConnectionStrings__userdb` | *(from Key Vault)* | UserService only |
-| `ExternalAuth__BaseUrl` | *(provider URL)* | AuthenticateService only |
+| `ConnectionStrings__userdb` | *(from Key Vault)* | UserService only — SQL auth connection string |
+| `IdentityServer__BaseUrl` | *(Identity Server URL)* | AuthenticateService only |
+| `IdentityServer__ClientId` | `bestmed.homecare.mobile` | AuthenticateService only |
+| `IdentityServer__Scope` | `api` | AuthenticateService only |
 
 ### Security Recommendations for Production
 

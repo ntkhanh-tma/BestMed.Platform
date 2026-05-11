@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BestMed.Common\BestMed.Common.csproj" IsAspireProjectResource="false" />
     <ProjectReference Include="..\BestMed.AuthenticateService\BestMed.AuthenticateService.csproj" />
     <ProjectReference Include="..\BestMed.Gateway\BestMed.Gateway.csproj" />
     <ProjectReference Include="..\BestMed.UserService\BestMed.UserService.csproj" />
