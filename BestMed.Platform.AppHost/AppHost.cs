@@ -14,39 +14,48 @@ var builder = DistributedApplication.CreateBuilder(args);
 // var redis = builder.AddRedis("redis");
 
 // ── Azure Service Bus ─────────────────────────────────────────────────────────
+// In Development: connection string is read from each service's
+// appsettings.Development.json (ConnectionStrings:servicebus) — no Azure provisioning.
+// In production: the Azure Service Bus resource is provisioned by Aspire.
+//
 // Topics and their service-specific subscriptions:
 //   role-updated        → user-service-role-updated      (UserService invalidates role cache)
 //   prescriber-updated  → user-service-prescriber-updated (UserService invalidates prescriber cache)
 //   user-status-changed → (reserved for future consumers, e.g. audit/notification service)
-var serviceBus = builder.AddAzureServiceBus(ServiceNames.ServiceBus);
+IResourceBuilder<Aspire.Hosting.Azure.AzureServiceBusResource>? serviceBus = null;
 
-serviceBus.AddServiceBusTopic(ServiceNames.Topics.RoleUpdated)
-    .AddServiceBusSubscription(ServiceNames.Subscriptions.UserServiceRoleUpdated);
+if (!builder.Environment.EnvironmentName.Equals("Development", StringComparison.OrdinalIgnoreCase))
+{
+    serviceBus = builder.AddAzureServiceBus(ServiceNames.ServiceBus);
 
-serviceBus.AddServiceBusTopic(ServiceNames.Topics.PrescriberUpdated)
-    .AddServiceBusSubscription(ServiceNames.Subscriptions.UserServicePrescriberUpdated);
+    serviceBus.AddServiceBusTopic(ServiceNames.Topics.RoleUpdated)
+        .AddServiceBusSubscription(ServiceNames.Subscriptions.UserServiceRoleUpdated);
 
-serviceBus.AddServiceBusTopic(ServiceNames.Topics.UserStatusChanged);
-serviceBus.AddServiceBusTopic(ServiceNames.Topics.WarehouseUpdated);
+    serviceBus.AddServiceBusTopic(ServiceNames.Topics.PrescriberUpdated)
+        .AddServiceBusSubscription(ServiceNames.Subscriptions.UserServicePrescriberUpdated);
+
+    serviceBus.AddServiceBusTopic(ServiceNames.Topics.UserStatusChanged);
+    serviceBus.AddServiceBusTopic(ServiceNames.Topics.WarehouseUpdated);
+}
 
 var authService = builder.AddProject<Projects.BestMed_AuthenticateService>(ServiceNames.AuthService)
     .WithHttpHealthCheck("/health");
 
 var userService = builder.AddProject<Projects.BestMed_UserService>(ServiceNames.UserService)
-    .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus);
+    .WithHttpHealthCheck("/health");
+if (serviceBus is not null) userService.WithReference(serviceBus).WaitFor(serviceBus);
 
 var roleService = builder.AddProject<Projects.BestMed_RoleService>(ServiceNames.RoleService)
-    .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus);
+    .WithHttpHealthCheck("/health");
+if (serviceBus is not null) roleService.WithReference(serviceBus).WaitFor(serviceBus);
 
 var prescriberService = builder.AddProject<Projects.BestMed_PrescriberService>(ServiceNames.PrescriberService)
-    .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus);
+    .WithHttpHealthCheck("/health");
+if (serviceBus is not null) prescriberService.WithReference(serviceBus).WaitFor(serviceBus);
 
 var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>(ServiceNames.WarehouseService)
-    .WithHttpHealthCheck("/health")
-    .WithReference(serviceBus);
+    .WithHttpHealthCheck("/health");
+if (serviceBus is not null) warehouseService.WithReference(serviceBus).WaitFor(serviceBus);
 
 var gateway = builder.AddProject<Projects.BestMed_Gateway>(ServiceNames.Gateway)
     .WithExternalHttpEndpoints()
