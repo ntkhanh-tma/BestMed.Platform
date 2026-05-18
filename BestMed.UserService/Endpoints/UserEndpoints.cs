@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace BestMed.UserService.Endpoints;
 
@@ -54,35 +55,56 @@ public static class UserEndpoints
     private static async Task<IResult> GetByIdAsync(
         Guid id,
         ReadOnlyUserDbContext db,
+        ILogger<UserDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var user = await db.Users
-            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        try
+        {
+            var user = await db.Users
+                .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
 
-        return user is null
-            ? Results.NotFound()
-            : Results.Ok(user.ToDetailDto());
+            return user is null
+                ? Results.NotFound()
+                : Results.Ok(user.ToDetailDto());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving user {UserId}", id);
+            return Results.Problem("An error occurred while retrieving the user.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static async Task<IResult> GetByExternalIdAsync(
         string externalId,
         ReadOnlyUserDbContext db,
+        ILogger<UserDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var user = await db.Users
-            .FirstOrDefaultAsync(u => u.ExternalUserId == externalId, cancellationToken);
+        try
+        {
+            var user = await db.Users
+                .FirstOrDefaultAsync(u => u.ExternalUserId == externalId, cancellationToken);
 
-        return user is null
-            ? Results.NotFound()
-            : Results.Ok(user.ToDetailDto());
+            return user is null
+                ? Results.NotFound()
+                : Results.Ok(user.ToDetailDto());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving user by external ID '{ExternalId}'", externalId);
+            return Results.Problem("An error occurred while retrieving the user.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static async Task<IResult> QueryAsync(
         [AsParameters] UserQueryParameters query,
         ReadOnlyUserDbContext db,
+        ILogger<UserDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var queryable = db.Users.AsQueryable();
+        try
+        {
+            var queryable = db.Users.AsQueryable();
 
         // Apply filters
         if (!string.IsNullOrWhiteSpace(query.Email))
@@ -141,6 +163,12 @@ public static class UserEndpoints
         };
 
         return Results.Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error querying users");
+            return Results.Problem("An error occurred while querying users.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static async Task<IResult> UpdateAsync(
@@ -149,42 +177,52 @@ public static class UserEndpoints
         UserDbContext db,
         IOutputCacheStore cache,
         IEventPublisher eventPublisher,
+        ILogger<UserDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var user = await db.Users.FindAsync([id], cancellationToken);
-        if (user is null) return Results.NotFound();
+        logger.LogInformation("Updating user {UserId}", id);
 
-        var previousIsActive = user.IsActive;
-
-        if (request.Email is not null) user.Email = request.Email;
-        if (request.FirstName is not null) user.FirstName = request.FirstName;
-        if (request.LastName is not null) user.LastName = request.LastName;
-        if (request.PreferredName is not null) user.PreferredName = request.PreferredName;
-        if (request.Salutation is not null) user.Salutation = request.Salutation;
-        if (request.JobTitle is not null) user.JobTitle = request.JobTitle;
-        if (request.ContactNumber is not null) user.ContactNumber = request.ContactNumber;
-        if (request.Status is not null) user.Status = request.Status;
-        if (request.IsActive.HasValue) user.IsActive = request.IsActive.Value;
-        if (request.RoleId.HasValue) user.Role = request.RoleId.Value;
-        if (request.IsReadOnlyAccess.HasValue) user.IsReadOnlyAccess = request.IsReadOnlyAccess.Value;
-        user.LastUpdatedDate = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(cancellationToken);
-        await cache.EvictByTagAsync(Extensions.CacheTagUsers, cancellationToken);
-
-        // Pattern: Service Bus (async) — notify downstream services only when active status changes.
-        // HTTP is not appropriate here as there is no specific consumer to call synchronously.
-        if (request.IsActive.HasValue && user.IsActive != previousIsActive)
+        try
         {
-            await eventPublisher.PublishAsync(new UserStatusChangedEvent
-            {
-                UserId = user.Id,
-                IsActive = user.IsActive ?? false,
-                Status = user.Status
-            }, cancellationToken);
-        }
+            var user = await db.Users.FindAsync([id], cancellationToken);
+            if (user is null) return Results.NotFound();
 
-        return Results.Ok(user.ToDto());
+            var previousIsActive = user.IsActive;
+
+            if (request.Email is not null) user.Email = request.Email;
+            if (request.FirstName is not null) user.FirstName = request.FirstName;
+            if (request.LastName is not null) user.LastName = request.LastName;
+            if (request.PreferredName is not null) user.PreferredName = request.PreferredName;
+            if (request.Salutation is not null) user.Salutation = request.Salutation;
+            if (request.JobTitle is not null) user.JobTitle = request.JobTitle;
+            if (request.ContactNumber is not null) user.ContactNumber = request.ContactNumber;
+            if (request.Status is not null) user.Status = request.Status;
+            if (request.IsActive.HasValue) user.IsActive = request.IsActive.Value;
+            if (request.RoleId.HasValue) user.Role = request.RoleId.Value;
+            if (request.IsReadOnlyAccess.HasValue) user.IsReadOnlyAccess = request.IsReadOnlyAccess.Value;
+            user.LastUpdatedDate = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(cancellationToken);
+            await cache.EvictByTagAsync(Extensions.CacheTagUsers, cancellationToken);
+
+            if (request.IsActive.HasValue && user.IsActive != previousIsActive)
+            {
+                await eventPublisher.PublishAsync(new UserStatusChangedEvent
+                {
+                    UserId = user.Id,
+                    IsActive = user.IsActive ?? false,
+                    Status = user.Status
+                }, cancellationToken);
+            }
+
+            logger.LogInformation("User {UserId} updated successfully", id);
+            return Results.Ok(user.ToDto());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating user {UserId}", id);
+            return Results.Problem("An error occurred while updating the user.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static async Task<IResult> BulkUpdateAsync(
@@ -192,63 +230,73 @@ public static class UserEndpoints
         UserDbContext db,
         IOutputCacheStore cache,
         IEventPublisher eventPublisher,
+        ILogger<UserDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var ids = request.Users.Select(u => u.Id).ToList();
-        var users = await db.Users
-            .Where(u => ids.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, cancellationToken);
+        logger.LogInformation("Bulk updating {Count} user(s)", request.Users.Count);
 
-        var notFoundIds = new List<Guid>();
-        var statusChangedUsers = new List<(Guid UserId, bool IsActive, string? Status)>();
-
-        foreach (var item in request.Users)
+        try
         {
-            if (!users.TryGetValue(item.Id, out var user))
+            var ids = request.Users.Select(u => u.Id).ToList();
+            var users = await db.Users
+                .Where(u => ids.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, cancellationToken);
+
+            var notFoundIds = new List<Guid>();
+            var statusChangedUsers = new List<(Guid UserId, bool IsActive, string? Status)>();
+
+            foreach (var item in request.Users)
             {
-                notFoundIds.Add(item.Id);
-                continue;
+                if (!users.TryGetValue(item.Id, out var user))
+                {
+                    notFoundIds.Add(item.Id);
+                    continue;
+                }
+
+                var previousIsActive = user.IsActive;
+
+                if (item.Email is not null) user.Email = item.Email;
+                if (item.FirstName is not null) user.FirstName = item.FirstName;
+                if (item.LastName is not null) user.LastName = item.LastName;
+                if (item.PreferredName is not null) user.PreferredName = item.PreferredName;
+                if (item.ContactNumber is not null) user.ContactNumber = item.ContactNumber;
+                if (item.Status is not null) user.Status = item.Status;
+                if (item.IsActive.HasValue) user.IsActive = item.IsActive.Value;
+                if (item.RoleId.HasValue) user.Role = item.RoleId.Value;
+                if (item.IsReadOnlyAccess.HasValue) user.IsReadOnlyAccess = item.IsReadOnlyAccess.Value;
+                user.LastUpdatedDate = DateTime.UtcNow;
+
+                if (item.IsActive.HasValue && user.IsActive != previousIsActive)
+                    statusChangedUsers.Add((user.Id, user.IsActive ?? false, user.Status));
             }
 
-            var previousIsActive = user.IsActive;
+            await db.SaveChangesAsync(cancellationToken);
+            await cache.EvictByTagAsync(Extensions.CacheTagUsers, cancellationToken);
 
-            if (item.Email is not null) user.Email = item.Email;
-            if (item.FirstName is not null) user.FirstName = item.FirstName;
-            if (item.LastName is not null) user.LastName = item.LastName;
-            if (item.PreferredName is not null) user.PreferredName = item.PreferredName;
-            if (item.ContactNumber is not null) user.ContactNumber = item.ContactNumber;
-            if (item.Status is not null) user.Status = item.Status;
-            if (item.IsActive.HasValue) user.IsActive = item.IsActive.Value;
-            if (item.RoleId.HasValue) user.Role = item.RoleId.Value;
-            if (item.IsReadOnlyAccess.HasValue) user.IsReadOnlyAccess = item.IsReadOnlyAccess.Value;
-            user.LastUpdatedDate = DateTime.UtcNow;
-
-            // Track users whose active status actually changed for event publishing.
-            if (item.IsActive.HasValue && user.IsActive != previousIsActive)
-                statusChangedUsers.Add((user.Id, user.IsActive ?? false, user.Status));
-        }
-
-        await db.SaveChangesAsync(cancellationToken);
-        await cache.EvictByTagAsync(Extensions.CacheTagUsers, cancellationToken);
-
-        // Pattern: Service Bus (async) — one event per user whose status changed.
-        foreach (var (userId, isActive, status) in statusChangedUsers)
-        {
-            await eventPublisher.PublishAsync(new UserStatusChangedEvent
+            foreach (var (userId, isActive, status) in statusChangedUsers)
             {
-                UserId = userId,
-                IsActive = isActive,
-                Status = status
-            }, cancellationToken);
+                await eventPublisher.PublishAsync(new UserStatusChangedEvent
+                {
+                    UserId = userId,
+                    IsActive = isActive,
+                    Status = status
+                }, cancellationToken);
+            }
+
+            var result = new BulkOperationResult
+            {
+                Succeeded = request.Users.Count - notFoundIds.Count,
+                NotFound = notFoundIds.Count,
+                NotFoundIds = notFoundIds
+            };
+
+            logger.LogInformation("Bulk update completed: {Succeeded} succeeded, {NotFound} not found", result.Succeeded, result.NotFound);
+            return Results.Ok(result);
         }
-
-        var result = new BulkOperationResult
+        catch (Exception ex)
         {
-            Succeeded = request.Users.Count - notFoundIds.Count,
-            NotFound = notFoundIds.Count,
-            NotFoundIds = notFoundIds
-        };
-
-        return Results.Ok(result);
+            logger.LogError(ex, "Error during bulk user update");
+            return Results.Problem("An error occurred while updating users.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 }

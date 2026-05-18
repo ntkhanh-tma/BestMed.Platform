@@ -38,8 +38,99 @@ Every service that calls `builder.AddServiceDefaults()` automatically receives:
 | **Security Headers** | Middleware | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`. |
 | **Resilience** | Standard resilience handler | Retries, circuit breakers, and timeouts on all outgoing `HttpClient` calls. |
 | **Observability** | OpenTelemetry | Metrics (ASP.NET Core, HTTP, runtime), distributed tracing, structured logging via OTLP exporter. |
+| **Structured Logging** | Serilog | Console + rolling JSON file sinks, automatic log cleanup, per-service configuration. |
 | **Health Checks** | `/health` and `/alive` | Aspire health probes; health endpoints are anonymous and excluded from tracing. |
 | **Service Discovery** | HTTPS-only | Inter-service calls resolved via Aspire; plaintext schemes are disallowed. |
+
+### Logging
+
+All services automatically inherit structured logging via `AddServiceDefaults()` → `AddPlatformLogging()`.
+
+#### Architecture
+
+- **Serilog** with Console + File sinks
+- **Rolling daily JSON files** at `logs/log-YYYYMMDD.json`
+- **Automatic cleanup** of old log files (background `LogCleanupService`)
+- **All endpoints** have try/catch with structured error logging
+
+#### Log Level Configuration
+
+| Environment | Default Level | Rationale |
+|-------------|--------------|-----------|
+| Production (`appsettings.json`) | `Error` | Only errors are logged — minimal noise, minimal disk usage |
+| Development (`appsettings.Development.json`) | `Information` + `BestMed: Debug` | Verbose for troubleshooting |
+
+#### Universal Configuration (all services)
+
+Each service's `appsettings.json` sets the production baseline:
+
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Error",
+      "Override": {
+        "Microsoft.AspNetCore": "Error",
+        "Microsoft.EntityFrameworkCore": "Error",
+        "System.Net.Http": "Error"
+      }
+    }
+  }
+}
+```
+
+#### Per-Service Override (individual service)
+
+Override in a specific service's `appsettings.Development.json`:
+
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft.AspNetCore": "Warning",
+        "BestMed.WarehouseService": "Debug"
+      }
+    }
+  }
+}
+```
+
+#### File Logging Configuration
+
+```json
+{
+  "FileLogging": {
+    "Enabled": true,
+    "Path": "logs/log-.json",
+    "RetainedFileCountLimit": 30,
+    "FileSizeLimitMB": 50,
+    "CleanupIntervalHours": 24
+  }
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `Enabled` | `true` | Toggle file logging on/off |
+| `Path` | `logs/log-.json` | File path pattern (date is appended) |
+| `RetainedFileCountLimit` | `30` | Max log files before cleanup deletes oldest |
+| `FileSizeLimitMB` | `50` | Max size per file before rolling to next |
+| `CleanupIntervalHours` | `24` | How often the background cleanup runs |
+
+#### Log Levels (most to least verbose)
+
+`Verbose` → `Debug` → `Information` → `Warning` → `Error` → `Fatal`
+
+#### Key Files
+
+| File | Purpose |
+|------|---------|
+| `BestMed.Platform.ServiceDefaults/Logging/PlatformLoggingExtensions.cs` | Serilog registration with console + file sinks |
+| `BestMed.Platform.ServiceDefaults/Logging/LogCleanupService.cs` | Background service that purges old log files |
+| `{Service}/appsettings.json` | Production baseline (Error only) |
+| `{Service}/appsettings.Development.json` | Dev override (Information + Debug for BestMed namespace) |
 
 ### Libraries & Key Packages
 
@@ -51,6 +142,8 @@ Every service that calls `builder.AddServiceDefaults()` automatically receives:
 | `Microsoft.AspNetCore.Authentication.JwtBearer` | ServiceDefaults | Centralised JWT validation |
 | `Microsoft.Extensions.Http.Resilience` | ServiceDefaults | Retry, circuit breaker, timeout policies |
 | `OpenTelemetry.*` | ServiceDefaults | Metrics, tracing, logging |
+| `Serilog.AspNetCore` | ServiceDefaults | Structured logging with console and file sinks |
+| `Serilog.Sinks.File` | ServiceDefaults | Rolling daily JSON log files with retention |
 
 ---
 

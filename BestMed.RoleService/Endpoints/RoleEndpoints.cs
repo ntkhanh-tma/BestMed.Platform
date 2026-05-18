@@ -8,6 +8,7 @@ using BestMed.RoleService.Mapping;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BestMed.RoleService.Endpoints;
 
@@ -42,57 +43,75 @@ public static class RoleEndpoints
     private static async Task<IResult> GetByIdAsync(
         Guid id,
         ReadOnlyRoleDbContext db,
+        ILogger<RoleDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var role = await db.Roles
-            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+        try
+        {
+            var role = await db.Roles
+                .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-        return role is null
-            ? Results.NotFound()
-            : Results.Ok(role.ToDto());
+            return role is null
+                ? Results.NotFound()
+                : Results.Ok(role.ToDto());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving role {RoleId}", id);
+            return Results.Problem("An error occurred while retrieving the role.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static async Task<IResult> QueryAsync(
         [AsParameters] RoleQueryParameters query,
         ReadOnlyRoleDbContext db,
+        ILogger<RoleDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var queryable = db.Roles.AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(query.RoleCode))
-            queryable = queryable.Where(r => r.RoleCode != null && r.RoleCode.Contains(query.RoleCode));
-
-        if (!string.IsNullOrWhiteSpace(query.RoleName))
-            queryable = queryable.Where(r => r.RoleName != null && r.RoleName.Contains(query.RoleName));
-
-        if (query.UserTypeId.HasValue)
-            queryable = queryable.Where(r => r.UserTypeId == query.UserTypeId.Value);
-
-        var asc = SortDirection.IsAscending(query.SortDirection);
-        queryable = query.SortBy?.ToLowerInvariant() switch
+        try
         {
-            "rolecode" => asc
-                ? queryable.OrderBy(r => r.RoleCode)
-                : queryable.OrderByDescending(r => r.RoleCode),
-            _ => asc
-                ? queryable.OrderBy(r => r.RoleName)
-                : queryable.OrderByDescending(r => r.RoleName)
-        };
+            var queryable = db.Roles.AsQueryable();
 
-        var totalCount = await queryable.CountAsync(cancellationToken);
-        var items = await queryable
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .Select(r => r.ToDto())
-            .ToListAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(query.RoleCode))
+                queryable = queryable.Where(r => r.RoleCode != null && r.RoleCode.Contains(query.RoleCode));
 
-        return Results.Ok(new PagedResponse<RoleDto>
+            if (!string.IsNullOrWhiteSpace(query.RoleName))
+                queryable = queryable.Where(r => r.RoleName != null && r.RoleName.Contains(query.RoleName));
+
+            if (query.UserTypeId.HasValue)
+                queryable = queryable.Where(r => r.UserTypeId == query.UserTypeId.Value);
+
+            var asc = SortDirection.IsAscending(query.SortDirection);
+            queryable = query.SortBy?.ToLowerInvariant() switch
+            {
+                "rolecode" => asc
+                    ? queryable.OrderBy(r => r.RoleCode)
+                    : queryable.OrderByDescending(r => r.RoleCode),
+                _ => asc
+                    ? queryable.OrderBy(r => r.RoleName)
+                    : queryable.OrderByDescending(r => r.RoleName)
+            };
+
+            var totalCount = await queryable.CountAsync(cancellationToken);
+            var items = await queryable
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .Select(r => r.ToDto())
+                .ToListAsync(cancellationToken);
+
+            return Results.Ok(new PagedResponse<RoleDto>
+            {
+                Items = items,
+                Page = query.Page,
+                PageSize = query.PageSize,
+                TotalCount = totalCount
+            });
+        }
+        catch (Exception ex)
         {
-            Items = items,
-            Page = query.Page,
-            PageSize = query.PageSize,
-            TotalCount = totalCount
-        });
+            logger.LogError(ex, "Error querying roles");
+            return Results.Problem("An error occurred while querying roles.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     private static async Task<IResult> UpdateAsync(
@@ -101,29 +120,39 @@ public static class RoleEndpoints
         RoleDbContext db,
         IOutputCacheStore cache,
         IEventPublisher eventPublisher,
+        ILogger<RoleDbContext> logger,
         CancellationToken cancellationToken)
     {
-        var role = await db.Roles.FindAsync([id], cancellationToken);
-        if (role is null) return Results.NotFound();
+        logger.LogInformation("Updating role {RoleId}", id);
 
-        if (request.RoleCode is not null) role.RoleCode = request.RoleCode;
-        if (request.RoleName is not null) role.RoleName = request.RoleName;
-        if (request.Description is not null) role.Description = request.Description;
-        if (request.UserTypeId.HasValue) role.UserTypeId = request.UserTypeId.Value;
-        if (request.NormalizedRole is not null) role.NormalizedRole = request.NormalizedRole;
-
-        await db.SaveChangesAsync(cancellationToken);
-        await cache.EvictByTagAsync("roles", cancellationToken);
-
-        // Notify other services (e.g. UserService) that role data has changed.
-        // Pattern: Service Bus (async) — fire-and-forget, consumers invalidate their caches.
-        await eventPublisher.PublishAsync(new RoleUpdatedEvent
+        try
         {
-            RoleId = role.Id,
-            RoleName = role.RoleName,
-            NormalizedRole = role.NormalizedRole
-        }, cancellationToken);
+            var role = await db.Roles.FindAsync([id], cancellationToken);
+            if (role is null) return Results.NotFound();
 
-        return Results.Ok(role.ToDto());
+            if (request.RoleCode is not null) role.RoleCode = request.RoleCode;
+            if (request.RoleName is not null) role.RoleName = request.RoleName;
+            if (request.Description is not null) role.Description = request.Description;
+            if (request.UserTypeId.HasValue) role.UserTypeId = request.UserTypeId.Value;
+            if (request.NormalizedRole is not null) role.NormalizedRole = request.NormalizedRole;
+
+            await db.SaveChangesAsync(cancellationToken);
+            await cache.EvictByTagAsync("roles", cancellationToken);
+
+            await eventPublisher.PublishAsync(new RoleUpdatedEvent
+            {
+                RoleId = role.Id,
+                RoleName = role.RoleName,
+                NormalizedRole = role.NormalizedRole
+            }, cancellationToken);
+
+            logger.LogInformation("Role {RoleId} updated successfully", id);
+            return Results.Ok(role.ToDto());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating role {RoleId}", id);
+            return Results.Problem("An error occurred while updating the role.", statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 }

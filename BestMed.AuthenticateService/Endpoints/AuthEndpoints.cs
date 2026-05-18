@@ -2,6 +2,7 @@ using BestMed.AuthenticateService.Models;
 using BestMed.AuthenticateService.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace BestMed.AuthenticateService.Endpoints;
 
@@ -36,24 +37,37 @@ public static class AuthEndpoints
     private static async Task<IResult> LoginAsync(
         [FromBody] LoginRequest request,
         IExternalAuthProvider authProvider,
+        ILogger<IExternalAuthProvider> logger,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("Login attempt for user '{Username}'", request.Username);
+
         try
         {
             var result = await authProvider.LoginAsync(request, cancellationToken);
+            logger.LogInformation("Login successful for user '{Username}'", request.Username);
             return Results.Ok(result);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            logger.LogWarning(ex, "Login failed for user '{Username}' — authentication rejected", request.Username);
             return Results.Problem(
                 detail: "Authentication failed. Please check your credentials.",
                 statusCode: StatusCodes.Status401Unauthorized);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error during login for user '{Username}'", request.Username);
+            return Results.Problem(
+                detail: "An unexpected error occurred during authentication.",
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     }
 
     private static async Task<IResult> LogoutAsync(
         HttpContext httpContext,
         IExternalAuthProvider authProvider,
+        ILogger<IExternalAuthProvider> logger,
         CancellationToken cancellationToken)
     {
         var token = httpContext.Request.Headers.Authorization
@@ -68,31 +82,52 @@ public static class AuthEndpoints
         try
         {
             await authProvider.LogoutAsync(token, cancellationToken);
+            logger.LogInformation("Logout completed successfully");
             return Results.Ok();
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            logger.LogError(ex, "Logout failed — upstream auth provider returned an error");
             return Results.Problem(
                 detail: "Logout failed.",
                 statusCode: StatusCodes.Status502BadGateway);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error during logout");
+            return Results.Problem(
+                detail: "An unexpected error occurred during logout.",
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     }
 
     private static async Task<IResult> ConnectAsync(
         [FromBody] ConnectRequest request,
         IExternalAuthProvider authProvider,
+        ILogger<IExternalAuthProvider> logger,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("Token refresh attempt");
+
         try
         {
             var result = await authProvider.RefreshTokenAsync(request.RefreshToken, cancellationToken);
+            logger.LogInformation("Token refresh successful");
             return Results.Ok(result);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            logger.LogWarning(ex, "Token refresh failed — refresh token may be expired or invalid");
             return Results.Problem(
                 detail: "Token refresh failed. The refresh token may be expired or invalid.",
                 statusCode: StatusCodes.Status401Unauthorized);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error during token refresh");
+            return Results.Problem(
+                detail: "An unexpected error occurred during token refresh.",
+                statusCode: StatusCodes.Status500InternalServerError);
         }
     }
 }
