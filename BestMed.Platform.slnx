@@ -3,12 +3,17 @@
     <Project Path="BestMed.Platform.AppHost/BestMed.Platform.AppHost.csproj" />
   </Folder>
   <Folder Name="/Documents/">
+    <File Path="facility.md" />
     <File Path="identity-server.md" />
+    <File Path="pharmacy.md" />
   </Folder>
   <Folder Name="/Services/">
     <Project Path="BestMed.AuthenticateService/BestMed.AuthenticateService.csproj" />
     <Project Path="BestMed.Gateway/BestMed.Gateway.csproj" />
+    <Project Path="BestMed.PrescriberService/BestMed.PrescriberService.csproj" />
+    <Project Path="BestMed.RoleService/BestMed.RoleService.csproj" />
     <Project Path="BestMed.UserService/BestMed.UserService.csproj" />
+    <Project Path="BestMed.WarehouseService/BestMed.WarehouseService.csproj" />
   </Folder>
   <Folder Name="/Shared/">
     <Project Path="BestMed.Common/BestMed.Common.csproj" />
@@ -21,7 +26,4 @@
   <Folder Name="/Tests/">
     <Project Path="BestMed.Platform.Tests/BestMed.Platform.Tests.csproj" />
   </Folder>
-  <Project Path="BestMed.PrescriberService/BestMed.PrescriberService.csproj" />
-  <Project Path="BestMed.RoleService/BestMed.RoleService.csproj" />
-  <Project Path="BestMed.WarehouseService/BestMed.WarehouseService.csproj" />
 </Solution>
