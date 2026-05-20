@@ -36,6 +36,8 @@ if (!builder.Environment.EnvironmentName.Equals("Development", StringComparison.
 
     serviceBus.AddServiceBusTopic(ServiceNames.Topics.UserStatusChanged);
     serviceBus.AddServiceBusTopic(ServiceNames.Topics.WarehouseUpdated);
+    serviceBus.AddServiceBusTopic(ServiceNames.Topics.PharmacyUpdated);
+    serviceBus.AddServiceBusTopic(ServiceNames.Topics.FacilityUpdated);
 }
 
 var authService = builder.AddProject<Projects.BestMed_AuthenticateService>(ServiceNames.AuthService)
@@ -57,6 +59,14 @@ var warehouseService = builder.AddProject<Projects.BestMed_WarehouseService>(Ser
     .WithHttpHealthCheck("/health");
 if (serviceBus is not null) warehouseService.WithReference(serviceBus).WaitFor(serviceBus);
 
+var pharmacyService = builder.AddProject<Projects.BestMed_PharmacyService>(ServiceNames.PharmacyService)
+    .WithHttpHealthCheck("/health");
+if (serviceBus is not null) pharmacyService.WithReference(serviceBus).WaitFor(serviceBus);
+
+var facilityService = builder.AddProject<Projects.BestMed_FacilityService>(ServiceNames.FacilityService)
+    .WithHttpHealthCheck("/health");
+if (serviceBus is not null) facilityService.WithReference(serviceBus).WaitFor(serviceBus);
+
 var gateway = builder.AddProject<Projects.BestMed_Gateway>(ServiceNames.Gateway)
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
@@ -65,11 +75,15 @@ var gateway = builder.AddProject<Projects.BestMed_Gateway>(ServiceNames.Gateway)
     .WithReference(roleService)
     .WithReference(prescriberService)
     .WithReference(warehouseService)
+    .WithReference(pharmacyService)
+    .WithReference(facilityService)
     .WaitFor(authService)
     .WaitFor(userService)
     .WaitFor(roleService)
     .WaitFor(prescriberService)
-    .WaitFor(warehouseService);
+    .WaitFor(warehouseService)
+    .WaitFor(pharmacyService)
+    .WaitFor(facilityService);
 
 // Angular frontend is run separately via `ng serve` (Aspire.Hosting.NodeJs has no 13.x release).
 // Run: cd bestmed-web && ng serve --proxy-config proxy.conf.json

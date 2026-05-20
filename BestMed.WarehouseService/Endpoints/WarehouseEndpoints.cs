@@ -1,4 +1,3 @@
-using BestMed.Common.Constants;
 using BestMed.Common.Messaging;
 using BestMed.Common.Messaging.Events;
 using BestMed.Common.Models;
@@ -73,33 +72,9 @@ public static class WarehouseEndpoints
     {
         try
         {
-            var queryable = db.Warehouses.AsQueryable();
-
-            if (!string.IsNullOrWhiteSpace(query.Name))
-                queryable = queryable.Where(w => w.Name.Contains(query.Name));
-
-            if (!string.IsNullOrWhiteSpace(query.Suburb))
-                queryable = queryable.Where(w => w.Suburb != null && w.Suburb.Contains(query.Suburb));
-
-            if (!string.IsNullOrWhiteSpace(query.State))
-                queryable = queryable.Where(w => w.State == query.State);
-
-            if (query.IsMultiSite.HasValue)
-                queryable = queryable.Where(w => w.IsMultiSite == query.IsMultiSite.Value);
-
-            var asc = SortDirection.IsAscending(query.SortDirection);
-            queryable = query.SortBy?.ToLowerInvariant() switch
-            {
-                "suburb" => asc
-                    ? queryable.OrderBy(w => w.Suburb)
-                    : queryable.OrderByDescending(w => w.Suburb),
-                "state" => asc
-                    ? queryable.OrderBy(w => w.State)
-                    : queryable.OrderByDescending(w => w.State),
-                _ => asc
-                    ? queryable.OrderBy(w => w.Name)
-                    : queryable.OrderByDescending(w => w.Name)
-            };
+            var queryable = db.Warehouses
+                .ApplyFilters(query)
+                .ApplySorting(query);
 
             var totalCount = await queryable.CountAsync(cancellationToken);
             var items = await queryable
@@ -139,27 +114,7 @@ public static class WarehouseEndpoints
             var warehouse = await db.Warehouses.FindAsync([id], cancellationToken);
             if (warehouse is null) return Results.NotFound();
 
-            if (request.Name is not null) warehouse.Name = request.Name;
-            if (request.Address1 is not null) warehouse.Address1 = request.Address1;
-            if (request.Address2 is not null) warehouse.Address2 = request.Address2;
-            if (request.Suburb is not null) warehouse.Suburb = request.Suburb;
-            if (request.State is not null) warehouse.State = request.State;
-            if (request.PostCode is not null) warehouse.PostCode = request.PostCode;
-            if (request.Country is not null) warehouse.Country = request.Country;
-            if (request.ContactName is not null) warehouse.ContactName = request.ContactName;
-            if (request.Phone is not null) warehouse.Phone = request.Phone;
-            if (request.Fax is not null) warehouse.Fax = request.Fax;
-            if (request.Email is not null) warehouse.Email = request.Email;
-            if (request.IPDescription is not null) warehouse.IPDescription = request.IPDescription;
-            if (request.ABN is not null) warehouse.ABN = request.ABN;
-            if (request.StateTimeZoneId.HasValue) warehouse.StateTimeZoneId = request.StateTimeZoneId.Value;
-            if (request.IsMultiSite.HasValue) warehouse.IsMultiSite = request.IsMultiSite.Value;
-            if (request.RestrictPreferredBrand.HasValue) warehouse.RestrictPreferredBrand = request.RestrictPreferredBrand.Value;
-            if (request.HasThirdPartyPacking.HasValue) warehouse.HasThirdPartyPacking = request.HasThirdPartyPacking.Value;
-            if (request.PharmacyToInsert.HasValue) warehouse.PharmacyToInsert = request.PharmacyToInsert.Value;
-            if (request.EnablePasswordAging.HasValue) warehouse.EnablePasswordAging = request.EnablePasswordAging.Value;
-            if (request.PasswordAging.HasValue) warehouse.PasswordAging = request.PasswordAging.Value;
-            warehouse.LastUpdatedDate = DateTime.UtcNow;
+            request.ApplyTo(warehouse);
 
             await db.SaveChangesAsync(cancellationToken);
             await cache.EvictByTagAsync("warehouses", cancellationToken);

@@ -1,4 +1,3 @@
-using BestMed.Common.Constants;
 using BestMed.Common.Models;
 using BestMed.Common.Messaging;
 using BestMed.Common.Messaging.Events;
@@ -70,27 +69,9 @@ public static class RoleEndpoints
     {
         try
         {
-            var queryable = db.Roles.AsQueryable();
-
-            if (!string.IsNullOrWhiteSpace(query.RoleCode))
-                queryable = queryable.Where(r => r.RoleCode != null && r.RoleCode.Contains(query.RoleCode));
-
-            if (!string.IsNullOrWhiteSpace(query.RoleName))
-                queryable = queryable.Where(r => r.RoleName != null && r.RoleName.Contains(query.RoleName));
-
-            if (query.UserTypeId.HasValue)
-                queryable = queryable.Where(r => r.UserTypeId == query.UserTypeId.Value);
-
-            var asc = SortDirection.IsAscending(query.SortDirection);
-            queryable = query.SortBy?.ToLowerInvariant() switch
-            {
-                "rolecode" => asc
-                    ? queryable.OrderBy(r => r.RoleCode)
-                    : queryable.OrderByDescending(r => r.RoleCode),
-                _ => asc
-                    ? queryable.OrderBy(r => r.RoleName)
-                    : queryable.OrderByDescending(r => r.RoleName)
-            };
+            var queryable = db.Roles
+                .ApplyFilters(query)
+                .ApplySorting(query);
 
             var totalCount = await queryable.CountAsync(cancellationToken);
             var items = await queryable
@@ -130,11 +111,7 @@ public static class RoleEndpoints
             var role = await db.Roles.FindAsync([id], cancellationToken);
             if (role is null) return Results.NotFound();
 
-            if (request.RoleCode is not null) role.RoleCode = request.RoleCode;
-            if (request.RoleName is not null) role.RoleName = request.RoleName;
-            if (request.Description is not null) role.Description = request.Description;
-            if (request.UserTypeId.HasValue) role.UserTypeId = request.UserTypeId.Value;
-            if (request.NormalizedRole is not null) role.NormalizedRole = request.NormalizedRole;
+            request.ApplyTo(role);
 
             await db.SaveChangesAsync(cancellationToken);
             await cache.EvictByTagAsync("roles", cancellationToken);

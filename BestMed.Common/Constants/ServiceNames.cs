@@ -12,6 +12,8 @@ public static class ServiceNames
     public const string RoleService = "role-service";
     public const string PrescriberService = "prescriber-service";
     public const string WarehouseService = "warehouse-service";
+    public const string PharmacyService = "pharmacy-service";
+    public const string FacilityService = "facility-service";
     public const string Gateway = "gateway";
     public const string ServiceBus = "servicebus";
 
@@ -31,6 +33,10 @@ public static class ServiceNames
         public const string PrescriberDbReadOnly = "prescriberdb-readonly";
         public const string WarehouseDb = "warehousedb";
         public const string WarehouseDbReadOnly = "warehousedb-readonly";
+        public const string PharmacyDb = "pharmacydb";
+        public const string PharmacyDbReadOnly = "pharmacydb-readonly";
+        public const string FacilityDb = "facilitydb";
+        public const string FacilityDbReadOnly = "facilitydb-readonly";
     }
 
     // ── Database schema script paths (relative to solution root) ─────────────
@@ -40,6 +46,8 @@ public static class ServiceNames
         public const string Roles = "database/roles/001_InitialSchema.sql";
         public const string Prescribers = "database/prescribers/001_InitialSchema.sql";
         public const string Warehouses = "database/warehouses/001_InitialSchema.sql";
+        public const string Pharmacies = "database/pharmacies/001_InitialSchema.sql";
+        public const string Facilities = "database/facilities/001_InitialSchema.sql";
     }
 
     // ── Service Bus topics ───────────────────────────────────────────────────
@@ -49,6 +57,8 @@ public static class ServiceNames
         public const string PrescriberUpdated = "bmp-prescriber-updated";
         public const string UserStatusChanged = "bmp-user-status-changed";
         public const string WarehouseUpdated = "bmp-warehouse-updated";
+        public const string PharmacyUpdated = "bmp-pharmacy-updated";
+        public const string FacilityUpdated = "bmp-facility-updated";
     }
 
     // ── Service Bus subscriptions ────────────────────────────────────────────

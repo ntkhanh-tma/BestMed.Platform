@@ -7,7 +7,9 @@ using Microsoft.Extensions.Logging;
 namespace BestMed.Data;
 
 /// <summary>
-/// A hosted service that runs on startup to ensure the database exists and the schema is applied.
+/// A hosted lifecycle service that runs <em>after</em> the host has started to ensure the database
+/// exists and the schema is applied. By deferring to <see cref="IHostedLifecycleService.StartedAsync"/>
+/// the web server is already listening, so health checks can respond while provisioning runs.
 /// <para>
 /// Behaviour:
 /// <list type="number">
@@ -21,7 +23,7 @@ namespace BestMed.Data;
 /// <c>ServiceRegistration</c>. Only runs in the <c>Development</c> environment by default.
 /// </para>
 /// </summary>
-public sealed class DatabaseInitializer : IHostedService
+public sealed class DatabaseInitializer : IHostedLifecycleService
 {
     private readonly string _connectionString;
     private readonly string[] _schemaScripts;
@@ -40,7 +42,17 @@ public sealed class DatabaseInitializer : IHostedService
         _environment = environment;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Runs after the host has fully started (Kestrel is listening), so health checks
+    /// can respond while the database is being provisioned.
+    /// </summary>
+    public async Task StartedAsync(CancellationToken cancellationToken)
     {
         if (!_environment.IsDevelopment())
         {
@@ -118,8 +130,6 @@ public sealed class DatabaseInitializer : IHostedService
             _logger.LogError(ex, "Unexpected error during database auto-provisioning. The service will continue starting.");
         }
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private static async Task<bool> DatabaseExistsAsync(SqlConnection connection, string databaseName, CancellationToken cancellationToken)
     {

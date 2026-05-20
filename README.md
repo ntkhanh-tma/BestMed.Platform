@@ -9,18 +9,25 @@ A .NET 10 microservices solution built on [.NET Aspire](https://learn.microsoft.
 ### Architecture
 
 ```
-┌──────────────┐       ┌─────────────┐
-│   Angular    │──────▶│   Gateway   │  (YARP reverse proxy, external entry point)
-│   Frontend   │       │  /auth/*    │──▶ AuthenticateService
-└──────────────┘       │  /users/*   │──▶ UserService
-                       └─────────────┘
+┌──────────────┐       ┌─────────────────┐
+│   Angular    │──────▶│     Gateway     │  (YARP reverse proxy, external entry point)
+│   Frontend   │       │  /auth/*        │──▶ AuthenticateService
+└──────────────┘       │  /users/*       │──▶ UserService
+                       │  /roles/*       │──▶ RoleService
+                       │  /prescribers/* │──▶ PrescriberService
+                       │  /warehouses/*  │──▶ WarehouseService
+                       │  /pharmacies/*  │──▶ PharmacyService
+                       │  /facilities/*  │──▶ FacilityService
+                       └─────────────────┘
                               │
             ┌─────────────────┴─────────────────┐
             ▼                                   ▼
-   AuthenticateService                    UserService
-   (JWT issuance)                         (user CRUD)
-                                              │
-                                        Azure SQL DB
+   AuthenticateService                  Domain Services
+   (JWT issuance)                    (User, Role, Prescriber,
+                                      Warehouse, Pharmacy,
+                                      Facility)
+                                           │
+                                     Azure SQL DB
 ```
 
 All inter-service HTTP calls use **Aspire service discovery** (`https+http://servicename`) and are restricted to **HTTPS only**.
@@ -163,6 +170,8 @@ BestMed.Platform/
 ├── BestMed.RoleService/              # Role management
 ├── BestMed.PrescriberService/        # Prescriber management
 ├── BestMed.WarehouseService/         # Warehouse management
+├── BestMed.PharmacyService/          # Pharmacy management
+├── BestMed.FacilityService/          # Facility management
 └── BestMed.Platform.Tests/            # Integration tests
 ```
 
@@ -290,6 +299,26 @@ Database-first EF Core service against Azure SQL `[dbo].[Warehouse]` and related
 | `GET /warehouses/{id}` | Light | `short` (30 s) | Get a warehouse by ID including bank details, holidays and robots |
 | `GET /warehouses` | Standard | `query` (15 s) | Search/filter warehouses with pagination (name, suburb, state, isMultiSite) |
 | `PUT /warehouses/{id}` | Standard | Evicts `warehouses` tag | Update a single warehouse; publishes `warehouse-updated` event |
+
+#### `BestMed.PharmacyService` — Pharmacy Management
+
+Database-first EF Core service against Azure SQL `[dbo].[Pharmacy]` and related tables. Supports read/write separation via `PharmacyDbContext` (write) and `ReadOnlyPharmacyDbContext` (read). Child entities (`Facility`, `BESTMEDSupplyPharmacy`, `UserPharmacy`, etc.) are managed within the pharmacy aggregate.
+
+| Endpoint | Rate Limit | Cache | Description |
+|----------|------------|-------|-------------|
+| `GET /pharmacies/{id}` | Light | `short` (30 s) | Get a pharmacy by ID |
+| `GET /pharmacies` | Standard | `query` (15 s) | Search/filter pharmacies with pagination (name, state, suburb, active, warehouseId) |
+| `PUT /pharmacies/{id}` | Standard | Evicts `pharmacies` tag | Update a single pharmacy; publishes `pharmacy-updated` event |
+
+#### `BestMed.FacilityService` — Facility Management
+
+Database-first EF Core service against Azure SQL `[dbo].[Facility]` and related tables (Section, UserFacility, DoseRound, FacilityDoseConfig, BESTtrackFacilityConfig, WeeklyBulkRun, S8DestructionDrug/Request, ReportMedicationSummary, UTILog, etc.). Supports read/write separation via `FacilityDbContext` (write) and `ReadOnlyFacilityDbContext` (read). Sections are loaded eagerly on single-entity GET requests.
+
+| Endpoint | Rate Limit | Cache | Description |
+|----------|------------|-------|-------------|
+| `GET /facilities/{id}` | Light | `short` (30 s) | Get a facility by ID including sections |
+| `GET /facilities` | Standard | `query` (15 s) | Search/filter facilities with pagination (name, state, suburb, active, pharmacyId) |
+| `PUT /facilities/{id}` | Standard | Evicts `facilities` tag | Update a single facility; publishes `facility-updated` event |
 
 #### `BestMed.Platform.Tests` — Integration Tests
 
@@ -512,6 +541,8 @@ Supported environments: `Development`, `UAT`, `Production`.
 | `RoleService` | `sqldb-bmp-roles-{env}` | `RoleDbContext` | `ReadOnlyRoleDbContext` | `roledb`, `roledb-readonly` |
 | `PrescriberService` | `sqldb-bmp-prescribers-{env}` | `PrescriberDbContext` | `ReadOnlyPrescriberDbContext` | `prescriberdb`, `prescriberdb-readonly` |
 | `WarehouseService` | `sqldb-bmp-warehouses-{env}` | `WarehouseDbContext` | `ReadOnlyWarehouseDbContext` | `warehousedb`, `warehousedb-readonly` |
+| `PharmacyService` | `sqldb-bmp-pharmacies-{env}` | `PharmacyDbContext` | `ReadOnlyPharmacyDbContext` | `pharmacydb`, `pharmacydb-readonly` |
+| `FacilityService` | `sqldb-bmp-facilities-{env}` | `FacilityDbContext` | `ReadOnlyFacilityDbContext` | `facilitydb`, `facilitydb-readonly` |
 
 ### Setting Up a New Database
 
@@ -903,6 +934,8 @@ Never use HTTP for fire-and-forget notifications, and never use Service Bus when
 | `prescriber-updated` | PrescriberService | `userservice-prescriber-updated` | UserService | Invalidate the in-memory prescriber cache |
 | `user-status-changed` | UserService | *(none yet)* | *(future consumers)* | Notify downstream services when a user is activated/deactivated |
 | `warehouse-updated` | WarehouseService | *(none yet)* | *(future consumers)* | Notify downstream services when warehouse data changes |
+| `pharmacy-updated` | PharmacyService | *(none yet)* | *(future consumers)* | Notify downstream services when pharmacy data changes |
+| `facility-updated` | FacilityService | *(none yet)* | *(future consumers)* | Notify downstream services when facility data changes |
 
 ### Shared Contracts
 

@@ -1,0 +1,3 @@
+-- Placeholder: Facility database initial schema
+-- This script is used by DatabaseInitializer in Development to auto-provision tables.
+-- Add CREATE TABLE statements for all Facility domain tables here.
