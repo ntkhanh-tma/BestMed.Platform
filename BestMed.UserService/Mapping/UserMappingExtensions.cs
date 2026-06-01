@@ -1,6 +1,7 @@
 using BestMed.Common.Constants;
 using BestMed.UserService.DTOs;
 using BestMed.UserService.Entities;
+using BestMed.UserService.EventSourcing;
 
 namespace BestMed.UserService.Mapping;
 
@@ -87,6 +88,17 @@ public static class UserMappingExtensions
         if (request.RoleId.HasValue) user.Role = request.RoleId.Value;
         if (request.IsReadOnlyAccess.HasValue) user.IsReadOnlyAccess = request.IsReadOnlyAccess.Value;
         user.LastUpdatedDate = DateTime.UtcNow;
+    }
+
+    public static bool HasStatusChanges(this UpdateUserStatusRequest request, User user)
+    {
+        return (request.IsActive.HasValue && request.IsActive.Value != user.IsActive)
+            || (request.Status is not null && !string.Equals(request.Status, user.Status, StringComparison.Ordinal));
+    }
+
+    public static void ApplyTo(this UserStatusProjection projection, User user)
+    {
+        projection.ApplyTo(user);
     }
 
     public static void ApplyTo(this BulkUpdateUserItem item, User user)

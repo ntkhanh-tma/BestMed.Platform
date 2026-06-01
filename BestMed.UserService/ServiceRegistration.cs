@@ -3,6 +3,7 @@ using BestMed.Common.Messaging.Events;
 using BestMed.Data;
 using BestMed.UserService.Clients;
 using BestMed.UserService.Data;
+using BestMed.UserService.EventSourcing;
 using BestMed.UserService.Messaging;
 
 namespace BestMed.UserService;
@@ -16,7 +17,9 @@ public static class ServiceRegistration
     public static IHostApplicationBuilder AddUserServiceDefaults(this IHostApplicationBuilder builder)
     {
         // Auto-provision database on startup (Development only)
-        builder.AddDatabaseInitializer(ServiceNames.ConnectionStrings.UserDb, ServiceNames.SchemaScripts.Users);
+        builder.AddDatabaseInitializer(ServiceNames.ConnectionStrings.UserDb,
+            ServiceNames.SchemaScripts.Users,
+            ServiceNames.SchemaScripts.UserStatusEvents);
 
         // Read-write context: used for create/update/delete operations.
         builder.AddSqlServerDbContext<UserDbContext>(ServiceNames.ConnectionStrings.UserDb, configureSettings: settings =>
@@ -69,6 +72,9 @@ public static class ServiceRegistration
 
         builder.AddServiceBusSubscriber<PrescriberUpdatedEvent, PrescriberUpdatedEventHandler>(
             subscriptionName: ServiceNames.Subscriptions.UserServicePrescriberUpdated);
+
+        // Event-sourced slice for User status changes.
+        builder.Services.AddScoped<UserStatusEventStore>();
 
         return builder;
     }

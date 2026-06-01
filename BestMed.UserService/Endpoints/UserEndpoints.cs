@@ -3,6 +3,7 @@ using BestMed.Common.Messaging.Events;
 using BestMed.Common.Models;
 using BestMed.UserService.Data;
 using BestMed.UserService.DTOs;
+using BestMed.UserService.EventSourcing;
 using BestMed.UserService.Mapping;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OutputCaching;
@@ -41,6 +42,11 @@ public static class UserEndpoints
         group.MapPut("/{id:guid}", UpdateAsync)
             .WithName("UpdateUser")
             .WithDescription("Update a single user")
+            .RequireRateLimiting(Extensions.RateLimitStandard);
+
+        group.MapPut("/{id:guid}/status", UpdateStatusAsync)
+            .WithName("UpdateUserStatus")
+            .WithDescription("Update the user status using the event-sourced status stream")
             .RequireRateLimiting(Extensions.RateLimitStandard);
 
         group.MapPut("/bulk", BulkUpdateAsync)
@@ -172,6 +178,52 @@ public static class UserEndpoints
         {
             logger.LogError(ex, "Error updating user {UserId}", id);
             return Results.Problem("An error occurred while updating the user.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static async Task<IResult> UpdateStatusAsync(
+        Guid id,
+        [FromBody] UpdateUserStatusRequest request,
+        UserDbContext db,
+        UserStatusEventStore statusEventStore,
+        IOutputCacheStore cache,
+        IEventPublisher eventPublisher,
+        ILogger<UserDbContext> logger,
+        CancellationToken cancellationToken)
+    {
+        if (request.IsActive is null && request.Status is null)
+            return Results.BadRequest("At least one status field must be provided.");
+
+        logger.LogInformation("Updating user status {UserId}", id);
+
+        try
+        {
+            var user = await db.Users.FindAsync([id], cancellationToken);
+            if (user is null) return Results.NotFound();
+
+            if (!request.HasStatusChanges(user))
+                return Results.Ok(user.ToDto());
+
+            var projection = await statusEventStore.AppendAsync(user, request, cancellationToken);
+            projection.ApplyTo(user);
+
+            await db.SaveChangesAsync(cancellationToken);
+            await cache.EvictByTagAsync(Extensions.CacheTagUsers, cancellationToken);
+
+            await eventPublisher.PublishAsync(new UserStatusChangedEvent
+            {
+                UserId = user.Id,
+                IsActive = user.IsActive ?? false,
+                Status = user.Status
+            }, cancellationToken);
+
+            logger.LogInformation("User status {UserId} updated successfully", id);
+            return Results.Ok(user.ToDto());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating user status {UserId}", id);
+            return Results.Problem("An error occurred while updating the user status.", statusCode: StatusCodes.Status500InternalServerError);
         }
     }
 

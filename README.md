@@ -937,6 +937,21 @@ Never use HTTP for fire-and-forget notifications, and never use Service Bus when
 | `pharmacy-updated` | PharmacyService | *(none yet)* | *(future consumers)* | Notify downstream services when pharmacy data changes |
 | `facility-updated` | FacilityService | *(none yet)* | *(future consumers)* | Notify downstream services when facility data changes |
 
+### Selected Event-Sourced Operation
+
+The solution now uses a narrow event-sourced slice for **UserService status changes**.
+
+| Operation | Write Model | Event Stream | Read Model | Notes |
+|-----------|-------------|--------------|------------|-------|
+| `PUT /users/{id}/status` | `UserService.Users` | `UserStatusEvent` | Existing `User` table plus current status projection | Status changes are appended to an ordered event stream and then projected back onto the user record |
+
+Rules for this first event-sourced flow:
+
+- The event stream is the source of truth for status transitions.
+- The current user record remains the query-friendly read model.
+- Integration events still publish to Service Bus after the status update is committed.
+- The pattern is intentionally narrow and should be expanded only when a business flow clearly benefits from replayable history.
+
 ### Shared Contracts
 
 Cross-service DTOs live in `BestMed.Common/Contracts/` — **never reference another service's internal DTOs directly**. This avoids circular project dependencies and keeps each service independently deployable.

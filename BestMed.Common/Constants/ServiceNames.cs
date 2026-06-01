@@ -43,6 +43,7 @@ public static class ServiceNames
     public static class SchemaScripts
     {
         public const string Users = "database/users/001_InitialSchema.sql";
+        public const string UserStatusEvents = "database/users/002_UserStatusEvents.sql";
         public const string Roles = "database/roles/001_InitialSchema.sql";
         public const string Prescribers = "database/prescribers/001_InitialSchema.sql";
         public const string Warehouses = "database/warehouses/001_InitialSchema.sql";

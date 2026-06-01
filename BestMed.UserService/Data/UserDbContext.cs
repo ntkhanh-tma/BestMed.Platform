@@ -19,11 +19,19 @@ public partial class UserDbContext : BestMedDbContext
     }
 
     public virtual DbSet<User> Users { get; set; } = null!;
+    public virtual DbSet<UserStatusEventRecord> UserStatusEvents { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(UserDbContext).Assembly);
+        modelBuilder.Entity<UserStatusEventRecord>(entity =>
+        {
+            entity.HasKey(e => e.EventId);
+            entity.HasIndex(e => new { e.UserId, e.Version }).IsUnique();
+            entity.Property(e => e.EventType).HasMaxLength(50);
+            entity.Property(e => e.Status).HasMaxLength(20);
+        });
         OnModelCreatingPartial(modelBuilder);
     }
 
