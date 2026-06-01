@@ -3,6 +3,8 @@
     <Project Path="BestMed.Platform.AppHost/BestMed.Platform.AppHost.csproj" />
   </Folder>
   <Folder Name="/Documents/">
+    <File Path="../BESThealth/source/main/Neutron.Business/WarehouseBusiness.cs" />
+    <File Path="../BESThealth/source/main/Neutron.WebApp/Areas/BESTpack/Controllers/WarehouseController.cs" />
     <File Path="facility.md" />
     <File Path="identity-server.md" />
     <File Path="pharmacy.md" />

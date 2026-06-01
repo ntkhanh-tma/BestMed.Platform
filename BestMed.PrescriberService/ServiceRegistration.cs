@@ -2,6 +2,7 @@ using BestMed.Common.Constants;
 using BestMed.Common.Messaging.Events;
 using BestMed.Data;
 using BestMed.PrescriberService.Data;
+using BestMed.PrescriberService.Services;
 
 namespace BestMed.PrescriberService;
 
@@ -30,6 +31,8 @@ public static class ServiceRegistration
 
         builder.AddServiceBusPublisher();
         builder.EnsureTopicExists<PrescriberUpdatedEvent>();
+
+        builder.Services.AddScoped<IPrescriberService, Services.PrescriberService>();
 
         return builder;
     }

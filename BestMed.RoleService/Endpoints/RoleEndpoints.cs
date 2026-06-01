@@ -1,13 +1,6 @@
-using BestMed.Common.Models;
-using BestMed.Common.Messaging;
-using BestMed.Common.Messaging.Events;
-using BestMed.RoleService.Data;
 using BestMed.RoleService.DTOs;
-using BestMed.RoleService.Mapping;
+using BestMed.RoleService.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace BestMed.RoleService.Endpoints;
 
@@ -19,117 +12,26 @@ public static class RoleEndpoints
             .WithTags("Roles")
             .RequireAuthorization();
 
-        group.MapGet("/{id:guid}", GetByIdAsync)
+        group.MapGet("/{id:guid}", (Guid id, IRoleService svc, CancellationToken ct)
+                => svc.GetByIdAsync(id, ct))
             .WithName("GetRoleById")
             .WithDescription("Get a single role by ID")
             .RequireRateLimiting(Extensions.RateLimitLight)
             .CacheOutput("short");
 
-        group.MapGet("/", QueryAsync)
+        group.MapGet("/", ([AsParameters] RoleQueryParameters query, IRoleService svc, CancellationToken ct)
+                => svc.QueryAsync(query, ct))
             .WithName("QueryRoles")
             .WithDescription("Search and filter roles with pagination")
             .RequireRateLimiting(Extensions.RateLimitStandard)
             .CacheOutput("query");
 
-        group.MapPut("/{id:guid}", UpdateAsync)
+        group.MapPut("/{id:guid}", (Guid id, [FromBody] UpdateRoleRequest request, IRoleService svc, CancellationToken ct)
+                => svc.UpdateAsync(id, request, ct))
             .WithName("UpdateRole")
             .WithDescription("Update a single role")
             .RequireRateLimiting(Extensions.RateLimitStandard);
 
         return routes;
-    }
-
-    private static async Task<IResult> GetByIdAsync(
-        Guid id,
-        ReadOnlyRoleDbContext db,
-        ILogger<RoleDbContext> logger,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var role = await db.Roles
-                .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
-
-            return role is null
-                ? Results.NotFound()
-                : Results.Ok(role.ToDto());
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving role {RoleId}", id);
-            return Results.Problem("An error occurred while retrieving the role.", statusCode: StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    private static async Task<IResult> QueryAsync(
-        [AsParameters] RoleQueryParameters query,
-        ReadOnlyRoleDbContext db,
-        ILogger<RoleDbContext> logger,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var queryable = db.Roles
-                .ApplyFilters(query)
-                .ApplySorting(query);
-
-            var totalCount = await queryable.CountAsync(cancellationToken);
-            var items = await queryable
-                .Skip((query.Page - 1) * query.PageSize)
-                .Take(query.PageSize)
-                .Select(r => r.ToDto())
-                .ToListAsync(cancellationToken);
-
-            return Results.Ok(new PagedResponse<RoleDto>
-            {
-                Items = items,
-                Page = query.Page,
-                PageSize = query.PageSize,
-                TotalCount = totalCount
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error querying roles");
-            return Results.Problem("An error occurred while querying roles.", statusCode: StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    private static async Task<IResult> UpdateAsync(
-        Guid id,
-        [FromBody] UpdateRoleRequest request,
-        RoleDbContext db,
-        IOutputCacheStore cache,
-        IEventPublisher eventPublisher,
-        ILogger<RoleDbContext> logger,
-        CancellationToken cancellationToken)
-    {
-        logger.LogInformation("Updating role {RoleId}", id);
-
-        try
-        {
-            var role = await db.Roles.FindAsync([id], cancellationToken);
-            if (role is null) return Results.NotFound();
-
-            request.ApplyTo(role);
-
-            await db.SaveChangesAsync(cancellationToken);
-            await cache.EvictByTagAsync("roles", cancellationToken);
-
-            await eventPublisher.PublishAsync(new RoleUpdatedEvent
-            {
-                RoleId = role.Id,
-                RoleName = role.RoleName,
-                NormalizedRole = role.NormalizedRole
-            }, cancellationToken);
-
-            logger.LogInformation("Role {RoleId} updated successfully", id);
-            return Results.Ok(role.ToDto());
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error updating role {RoleId}", id);
-            return Results.Problem("An error occurred while updating the role.", statusCode: StatusCodes.Status500InternalServerError);
-        }
     }
 }

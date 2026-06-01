@@ -15,6 +15,9 @@ public partial class WarehouseHoliday : IEntity
 
     public Guid WarehouseId { get; set; }
 
+    /// <summary>Optional FK — when set, the holiday is scoped to a specific pharmacy linked to this warehouse.</summary>
+    public Guid? PharmacyId { get; set; }
+
     public DateTime HolidayDate { get; set; }
 
     [StringLength(500)]

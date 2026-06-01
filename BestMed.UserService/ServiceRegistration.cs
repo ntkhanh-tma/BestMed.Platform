@@ -5,6 +5,7 @@ using BestMed.UserService.Clients;
 using BestMed.UserService.Data;
 using BestMed.UserService.EventSourcing;
 using BestMed.UserService.Messaging;
+using BestMed.UserService.Services;
 
 namespace BestMed.UserService;
 
@@ -75,6 +76,8 @@ public static class ServiceRegistration
 
         // Event-sourced slice for User status changes.
         builder.Services.AddScoped<UserStatusEventStore>();
+
+        builder.Services.AddScoped<IUserService, Services.UserService>();
 
         return builder;
     }

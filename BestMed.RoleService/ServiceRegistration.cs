@@ -2,6 +2,7 @@ using BestMed.Common.Constants;
 using BestMed.Common.Messaging.Events;
 using BestMed.Data;
 using BestMed.RoleService.Data;
+using BestMed.RoleService.Services;
 
 namespace BestMed.RoleService;
 
@@ -30,6 +31,8 @@ public static class ServiceRegistration
 
         builder.AddServiceBusPublisher();
         builder.EnsureTopicExists<RoleUpdatedEvent>();
+
+        builder.Services.AddScoped<IRoleService, Services.RoleService>();
 
         return builder;
     }

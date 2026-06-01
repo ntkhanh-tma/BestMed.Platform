@@ -2,6 +2,7 @@ using BestMed.Common.Constants;
 using BestMed.Common.Messaging.Events;
 using BestMed.Data;
 using BestMed.PharmacyService.Data;
+using BestMed.PharmacyService.Services;
 
 namespace BestMed.PharmacyService;
 
@@ -30,6 +31,8 @@ public static class ServiceRegistration
 
         builder.AddServiceBusPublisher();
         builder.EnsureTopicExists<PharmacyUpdatedEvent>();
+
+        builder.Services.AddScoped<IPharmacyService, Services.PharmacyService>();
 
         return builder;
     }

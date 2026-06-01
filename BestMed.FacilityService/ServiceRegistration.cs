@@ -2,6 +2,7 @@ using BestMed.Common.Constants;
 using BestMed.Common.Messaging.Events;
 using BestMed.Data;
 using BestMed.FacilityService.Data;
+using BestMed.FacilityService.Services;
 
 namespace BestMed.FacilityService;
 
@@ -30,6 +31,8 @@ public static class ServiceRegistration
 
         builder.AddServiceBusPublisher();
         builder.EnsureTopicExists<FacilityUpdatedEvent>();
+
+        builder.Services.AddScoped<IFacilityService, Services.FacilityService>();
 
         return builder;
     }

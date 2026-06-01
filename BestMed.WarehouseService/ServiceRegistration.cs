@@ -2,6 +2,7 @@ using BestMed.Common.Constants;
 using BestMed.Common.Messaging.Events;
 using BestMed.Data;
 using BestMed.WarehouseService.Data;
+using BestMed.WarehouseService.Services;
 
 namespace BestMed.WarehouseService;
 
@@ -30,6 +31,8 @@ public static class ServiceRegistration
 
         builder.AddServiceBusPublisher();
         builder.EnsureTopicExists<WarehouseUpdatedEvent>();
+
+        builder.Services.AddScoped<IWarehouseService, Services.WarehouseService>();
 
         return builder;
     }

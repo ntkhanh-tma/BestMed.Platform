@@ -73,6 +73,7 @@ public static class WarehouseMappingExtensions
     public static WarehouseBankDetailDto ToDto(this WarehouseBankDetail entity) => new()
     {
         Id = entity.Id,
+        WarehouseId = entity.WarehouseId,
         BankName = entity.BankName,
         BSB = entity.BSB,
         AccountNumber = entity.AccountNumber
@@ -81,6 +82,8 @@ public static class WarehouseMappingExtensions
     public static WarehouseHolidayDto ToDto(this WarehouseHoliday entity) => new()
     {
         Id = entity.Id,
+        WarehouseId = entity.WarehouseId,
+        PharmacyId = entity.PharmacyId,
         HolidayDate = entity.HolidayDate,
         HolidayName = entity.HolidayName,
         Description = entity.Description,
@@ -91,6 +94,12 @@ public static class WarehouseMappingExtensions
     {
         Id = entity.Id,
         Type = entity.Type
+    };
+
+    public static WarehouseNameDto ToNameDto(this Warehouse entity) => new()
+    {
+        Id = entity.Id,
+        Name = entity.Name
     };
 
     public static void ApplyTo(this UpdateWarehouseRequest request, Warehouse warehouse)
@@ -106,7 +115,10 @@ public static class WarehouseMappingExtensions
         if (request.Phone is not null) warehouse.Phone = request.Phone;
         if (request.Fax is not null) warehouse.Fax = request.Fax;
         if (request.Email is not null) warehouse.Email = request.Email;
+        if (request.IPAddress is not null) warehouse.IPAddress = request.IPAddress;
         if (request.IPDescription is not null) warehouse.IPDescription = request.IPDescription;
+        if (request.GeoLocations is not null) warehouse.GeoLocations = request.GeoLocations;
+        if (request.GeoRadius.HasValue) warehouse.GeoRadius = request.GeoRadius.Value;
         if (request.ABN is not null) warehouse.ABN = request.ABN;
         if (request.StateTimeZoneId.HasValue) warehouse.StateTimeZoneId = request.StateTimeZoneId.Value;
         if (request.IsMultiSite.HasValue) warehouse.IsMultiSite = request.IsMultiSite.Value;
@@ -116,6 +128,61 @@ public static class WarehouseMappingExtensions
         if (request.EnablePasswordAging.HasValue) warehouse.EnablePasswordAging = request.EnablePasswordAging.Value;
         if (request.PasswordAging.HasValue) warehouse.PasswordAging = request.PasswordAging.Value;
         warehouse.LastUpdatedDate = DateTime.UtcNow;
+    }
+
+    public static void ApplyTo(this CreateWarehouseRequest request, Warehouse warehouse)
+    {
+        warehouse.Name = request.Name;
+        warehouse.Address1 = request.Address1;
+        warehouse.Address2 = request.Address2;
+        warehouse.Suburb = request.Suburb;
+        warehouse.State = request.State;
+        warehouse.PostCode = request.PostCode;
+        warehouse.Country = request.Country;
+        warehouse.ContactName = request.ContactName;
+        warehouse.Phone = request.Phone;
+        warehouse.Fax = request.Fax;
+        warehouse.Email = request.Email;
+        warehouse.ABN = request.ABN;
+        warehouse.StateTimeZoneId = request.StateTimeZoneId;
+        warehouse.IsMultiSite = request.IsMultiSite;
+        warehouse.HasThirdPartyPacking = request.HasThirdPartyPacking;
+        warehouse.CreatedDate = DateTime.UtcNow;
+        warehouse.LastUpdatedDate = DateTime.UtcNow;
+    }
+
+    public static void ApplyTo(this UpdateWarehouseConfigRequest request, Warehouse warehouse)
+    {
+        if (request.SachetRobotTypeId is not null) warehouse.SachetRobotTypeId = request.SachetRobotTypeId;
+        if (request.BlisterRobotTypeId is not null) warehouse.BlisterRobotTypeId = request.BlisterRobotTypeId;
+
+        // Mirror legacy: YuyamaModelId is only set when the sachet robot type contains 'yuyama'; otherwise it must be cleared.
+        if (request.SachetRobotTypeId is not null)
+            warehouse.YuyamaModelId = request.SachetRobotTypeId.Contains("yuyama", StringComparison.OrdinalIgnoreCase)
+                ? request.YuyamaModelId
+                : null;
+
+        // Mirror legacy: null means "no checking machine" — field must be explicitly cleared.
+        warehouse.CheckingMachineType = request.CheckingMachineTypeId;
+
+        if (request.XMLUserName is not null) warehouse.XMLUserName = request.XMLUserName;
+        if (request.XMLUserPassword is not null) warehouse.XMLUserPassword = request.XMLUserPassword;
+
+        // Mirror legacy FormatAbn: strip all whitespace before storing.
+        if (request.ABN is not null)
+            warehouse.ABN = new string(request.ABN.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+        warehouse.IsMultiSite = request.IsMultiSite;
+        if (request.HasThirdPartyPacking.HasValue) warehouse.HasThirdPartyPacking = request.HasThirdPartyPacking.Value;
+        if (request.PharmacyToInsert.HasValue) warehouse.PharmacyToInsert = request.PharmacyToInsert.Value;
+        warehouse.LastUpdatedDate = DateTime.UtcNow;
+    }
+
+    public static void ApplyTo(this SaveWarehouseBankDetailRequest request, WarehouseBankDetail bankDetail)
+    {
+        bankDetail.BankName = request.BankName;
+        bankDetail.BSB = request.BSB;
+        bankDetail.AccountNumber = request.AccountNumber;
     }
 
     public static IQueryable<Warehouse> ApplyFilters(this IQueryable<Warehouse> queryable, WarehouseQueryParameters query)
