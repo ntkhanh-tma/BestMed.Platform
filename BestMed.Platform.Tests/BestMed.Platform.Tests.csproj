@@ -12,20 +12,31 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Testing" Version="13.1.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="FluentAssertions" Version="8.4.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="xunit.v3" Version="3.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\BestMed.Platform.AppHost\BestMed.Platform.AppHost.csproj" />
+    <ProjectReference Include="..\BestMed.UserService\BestMed.UserService.csproj" />
+    <ProjectReference Include="..\BestMed.WarehouseService\BestMed.WarehouseService.csproj" />
+    <ProjectReference Include="..\BestMed.PharmacyService\BestMed.PharmacyService.csproj" />
+    <ProjectReference Include="..\BestMed.FacilityService\BestMed.FacilityService.csproj" />
+    <ProjectReference Include="..\BestMed.RoleService\BestMed.RoleService.csproj" />
+    <ProjectReference Include="..\BestMed.PrescriberService\BestMed.PrescriberService.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="System.Net" />
+    <Using Include="FluentAssertions" />
+    <Using Include="Microsoft.AspNetCore.Http" />
     <Using Include="Microsoft.Extensions.DependencyInjection" />
     <Using Include="Aspire.Hosting.ApplicationModel" />
     <Using Include="Aspire.Hosting.Testing" />
+    <Using Include="NSubstitute" />
     <Using Include="Xunit" />
   </ItemGroup>
 

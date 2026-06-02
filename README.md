@@ -167,12 +167,34 @@ BestMed.Platform/
 ├── BestMed.Gateway/                  # YARP reverse proxy (external entry point)
 ├── BestMed.AuthenticateService/      # Authentication & token issuance
 ├── BestMed.UserService/              # User management CRUD
+│   ├── Services/IUserService.cs      # Interface — mock this in unit tests
+│   ├── Services/UserService.cs       # Concrete implementation (scoped DI)
+│   ├── Endpoints/UserEndpoints.cs    # Thin route map only — delegates to IUserService
+│   └── EventSourcing/               # Append-only status event store
 ├── BestMed.RoleService/              # Role management
+│   ├── Services/IRoleService.cs
+│   ├── Services/RoleService.cs
+│   └── Endpoints/RoleEndpoints.cs
 ├── BestMed.PrescriberService/        # Prescriber management
+│   ├── Services/IPrescriberService.cs
+│   ├── Services/PrescriberService.cs
+│   └── Endpoints/PrescriberEndpoints.cs
 ├── BestMed.WarehouseService/         # Warehouse management
+│   ├── Services/IWarehouseService.cs
+│   ├── Services/WarehouseService.cs
+│   └── Endpoints/WarehouseEndpoints.cs
 ├── BestMed.PharmacyService/          # Pharmacy management
+│   ├── Services/IPharmacyService.cs
+│   ├── Services/PharmacyService.cs
+│   └── Endpoints/PharmacyEndpoints.cs
 ├── BestMed.FacilityService/          # Facility management
-└── BestMed.Platform.Tests/            # Integration tests
+│   ├── Services/IFacilityService.cs
+│   ├── Services/FacilityService.cs
+│   └── Endpoints/FacilityEndpoints.cs
+└── BestMed.Platform.Tests/           # Unit + integration tests
+    ├── Services/                     # Interface contract tests (NSubstitute mocks)
+    ├── Endpoints/                    # Route delegation tests
+    └── Helpers/TestDataBuilders.cs   # Shared DTO/request factory methods
 ```
 
 ### Project Details
@@ -320,9 +342,65 @@ Database-first EF Core service against Azure SQL `[dbo].[Facility]` and related 
 | `GET /facilities` | Standard | `query` (15 s) | Search/filter facilities with pagination (name, state, suburb, active, pharmacyId) |
 | `PUT /facilities/{id}` | Standard | Evicts `facilities` tag | Update a single facility; publishes `facility-updated` event |
 
-#### `BestMed.Platform.Tests` — Integration Tests
+#### `BestMed.Platform.Tests` — Unit & Integration Tests
 
-Aspire-based integration tests that spin up the full distributed application.
+Contains two categories of tests:
+
+**Unit tests** (78 tests, NSubstitute + FluentAssertions):
+
+| Folder | Description |
+|--------|-------------|
+| `Services/` | Contract tests for each `I{X}Service` interface (happy path + not-found per method) |
+| `Endpoints/` | Delegation tests verifying route handlers call the correct service method with correct arguments |
+| `Helpers/TestDataBuilders.cs` | Centralised factory methods for all request/DTO objects — fix DTO shape changes in one place |
+
+Test classes:
+- `Services/UserServiceTests.cs`
+- `Services/WarehouseServiceTests.cs`
+- `Services/PharmacyServiceTests.cs`
+- `Services/FacilityServiceTests.cs`
+- `Services/RoleServiceTests.cs`
+- `Services/PrescriberServiceTests.cs`
+- `Endpoints/UserEndpointTests.cs`
+- `Endpoints/WarehouseEndpointTests.cs`
+
+**Integration tests** (Aspire-based, opt-in):
+
+- `WebTests.cs` — spins up the full distributed application via `DistributedApplicationTestingBuilder` and probes the `gateway` `/health` endpoint.
+- Skipped by default via the custom `[IntegrationFact]` attribute. Set `RUN_INTEGRATION_TESTS=true` to enable.
+- Requires live Azure SQL and Azure Service Bus connectivity.
+
+**Test results (current):**
+
+| Category | Count | Status |
+|----------|-------|--------|
+| Unit tests | 78 | ✅ All pass |
+| Integration tests | 1 | ⏭ Skipped (opt-in) |
+
+**Running all unit tests (fast, no infrastructure required):**
+
+```powershell
+dotnet test BestMed.Platform.Tests
+```
+
+**Running only a specific service's tests:**
+
+```powershell
+dotnet test BestMed.Platform.Tests --filter "FullyQualifiedName~UserService"
+```
+
+**Running only unit tests (exclude integration):**
+
+```powershell
+dotnet test BestMed.Platform.Tests --filter "FullyQualifiedName~Services|FullyQualifiedName~Endpoints"
+```
+
+**Running integration tests (requires live infrastructure):**
+
+```powershell
+$env:RUN_INTEGRATION_TESTS = "true"
+dotnet test BestMed.Platform.Tests --filter "Category=Integration"
+```
 
 ---
 
@@ -334,6 +412,49 @@ Aspire-based integration tests that spin up the full distributed application.
 - [Node.js 20+](https://nodejs.org/) (for Angular frontend)
 - [Visual Studio 2026 17.x+](https://visualstudio.microsoft.com/) or VS Code with C# Dev Kit
 - Azure CLI (for Azure SQL authentication: `az login`)
+
+### Service Layer Pattern (Endpoints → Interface → Implementation)
+
+All domain services follow a strict three-layer pattern:
+
+```
+Endpoints/{X}Endpoints.cs     ← thin route registration only
+    │  delegates via DI to
+    ▼
+Services/I{X}Service.cs       ← interface (mock this in tests)
+    │  implemented by
+    ▼
+Services/{X}Service.cs        ← concrete logic (DbContext, cache, events)
+```
+
+**Rule: endpoint files must contain no business or data-access logic.**
+
+Each route handler is a one-liner delegate:
+
+```csharp
+group.MapGet("/{id:guid}", (Guid id, IWarehouseService svc, CancellationToken ct)
+    => svc.GetByIdAsync(id, ct));
+```
+
+**Why this structure?**
+
+| Benefit | Detail |
+|---------|--------|
+| Unit testability | Mock `I{X}Service` with NSubstitute; no HTTP host needed |
+| Separation of concerns | Routes describe _what_ to expose; services describe _how_ to fulfil it |
+| Replaceability | Swap implementations (e.g. Redis-backed) without touching the endpoint layer |
+| Readability | Endpoint files stay < 80 lines regardless of service complexity |
+
+**Registering a new service:**
+
+```csharp
+// ServiceRegistration.cs
+builder.Services.AddScoped<IMyService, Services.MyService>();
+```
+
+> **Tip:** Because service class names match the project namespace suffix (e.g. `WarehouseService.Services.WarehouseService`), always qualify the concrete type as `Services.MyService` to avoid the `CS0118` namespace-vs-type compiler error.
+
+---
 
 ### Creating a New Service
 
@@ -708,6 +829,50 @@ Since the project uses database-first, schema changes are made directly in the d
 2. Re-scaffold the entities (see above).
 3. Verify the `ISoftDeletable` / `IAuditable` interfaces are re-applied on the scaffolded entities (scaffolding overwrites entity files).
 4. Commit the updated entity classes.
+
+---
+
+## V. Event Sourcing
+
+### Current Implementation
+
+Event sourcing is applied as a **narrow slice** to the `UserService` status change operation (`PUT /users/{id}/status`). It is **not** a solution-wide event store — it is a targeted pattern for operations where change history matters.
+
+```
+PUT /users/{id}/status
+    │
+    ▼
+UserService.UpdateStatusAsync()
+    ├── checks if status actually changed
+    ├── appends immutable event to UserStatusEventStore (append-only table)
+    ├── rebuilds the projection (latest view) from event history
+    └── saves projection + publishes UserStatusChangedEvent → Azure Service Bus
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `BestMed.UserService/EventSourcing/UserStatusEventStore.cs` | Append-only event log; `AppendAsync()` writes; `RebuildProjectionAsync()` replays |
+| `BestMed.UserService/Services/UserService.cs` | Consumes the event store inside `UpdateStatusAsync` |
+| `BestMed.Common/Messaging/Events/UserStatusChangedEvent.cs` | Integration event published to Service Bus |
+
+### When to Apply Event Sourcing
+
+Add event sourcing to a new operation when:
+- You need a full audit trail (who changed what, when, from what value)
+- Operations must be replayable / revertible
+- Downstream consumers need to react to _state transitions_ (not just final state)
+
+**Do not** apply it to simple CRUD operations that do not require history.
+
+### Extending to Other Services
+
+1. Create an append-only entity (e.g. `{Entity}StatusEvent`) inheriting `IEntity` + `IAuditable`.
+2. Add a `{Entity}EventStore` class (internal, same pattern as `UserStatusEventStore`).
+3. Inject it into the concrete service class.
+4. Register it in `ServiceRegistration.cs`.
+5. Define an `I{Entity}EventStore` interface if the store needs to be mockable in unit tests.
 
 ---
 
