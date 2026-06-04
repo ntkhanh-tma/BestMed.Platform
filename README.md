@@ -412,6 +412,58 @@ dotnet test BestMed.Platform.Tests --filter "Category=Integration"
 - [Node.js 20+](https://nodejs.org/) (for Angular frontend)
 - [Visual Studio 2026 17.x+](https://visualstudio.microsoft.com/) or VS Code with C# Dev Kit
 - Azure CLI (for Azure SQL authentication: `az login`)
+- [.NET Aspire CLI](https://learn.microsoft.com/dotnet/aspire/fundamentals/aspire-sdk-tooling) (required to run, scaffold, and manage Aspire resources)
+
+#### Installing the Aspire CLI
+
+The Aspire workload is distributed as a .NET global tool. Install it once per machine:
+
+```powershell
+# Install the Aspire workload (requires .NET 10 SDK)
+dotnet workload install aspire
+```
+
+Verify the installation:
+
+```powershell
+dotnet workload list
+# Should show: aspire
+```
+
+#### Keeping the Aspire CLI Up to Date
+
+The Aspire workload follows the .NET SDK release cadence. Update it whenever a new Aspire version is released or after upgrading the .NET SDK:
+
+```powershell
+# Update all installed workloads (including aspire)
+dotnet workload update
+```
+
+To update to a specific version, or if `dotnet workload update` does not pick up the latest release, repair and reinstall:
+
+```powershell
+dotnet workload repair
+dotnet workload install aspire
+```
+
+You can check the currently installed Aspire version via:
+
+```powershell
+dotnet workload list --include-previews
+```
+
+#### Running the Application with Aspire
+
+Once the workload is installed, start the entire platform (all services + frontend) through the Aspire AppHost:
+
+```powershell
+# From the solution root
+dotnet run --project BestMed.Platform.AppHost
+
+# Or open BestMed.Platform.AppHost as the startup project in Visual Studio and press F5
+```
+
+The Aspire dashboard will open automatically at `https://localhost:15888` and show live health, traces, logs, and metrics for every service.
 
 ### Service Layer Pattern (Endpoints → Interface → Implementation)
 
@@ -453,6 +505,72 @@ builder.Services.AddScoped<IMyService, Services.MyService>();
 ```
 
 > **Tip:** Because service class names match the project namespace suffix (e.g. `WarehouseService.Services.WarehouseService`), always qualify the concrete type as `Services.MyService` to avoid the `CS0118` namespace-vs-type compiler error.
+
+---
+
+### Read / Write DbContext Separation
+
+Every domain service maintains **two EF Core DbContext classes** — one for writes and one for reads — to support read replica routing and keep change-tracking overhead off read paths.
+
+#### Pattern
+
+| Class | Base Class | Change Tracking | SaveChanges | Connection String Key |
+|-------|-----------|----------------|-------------|----------------------|
+| `{X}DbContext` | `BestMedDbContext` | Enabled | Allowed | `{x}db` |
+| `ReadOnly{X}DbContext` | `BestMedReadOnlyDbContext` | **Disabled** | **Blocked** | `{x}readdb` |
+
+`BestMedReadOnlyDbContext` (in `BestMed.Data`) disables change tracking globally and throws if `SaveChanges` / `SaveChangesAsync` is called, preventing accidental writes through the read context.
+
+#### Implementation Per Service
+
+| Service | Write Context | Read Context |
+|---------|--------------|--------------|
+| `UserService` | `UserDbContext` | `ReadOnlyUserDbContext` |
+| `RoleService` | `RoleDbContext` | `ReadOnlyRoleDbContext` |
+| `PrescriberService` | `PrescriberDbContext` | `ReadOnlyPrescriberDbContext` |
+| `WarehouseService` | `WarehouseDbContext` | `ReadOnlyWarehouseDbContext` |
+| `PharmacyService` | `PharmacyDbContext` | `ReadOnlyPharmacyDbContext` |
+| `FacilityService` | `FacilityDbContext` | `ReadOnlyFacilityDbContext` |
+
+#### Usage Rules
+
+- **Always use `readDb` for queries** (`GET` handlers, `AnyAsync` existence checks before writes, `CountAsync`).
+- **Always use `db` for mutations** (`Add`, `Remove`, `FindAsync` + update, `SaveChangesAsync`).
+- Never inject `{X}DbContext` into an endpoint handler directly — use the service layer.
+
+#### WarehouseService Context Usage (verified)
+
+`WarehouseService` correctly applies this separation across all its operations:
+
+| Operation | Context Used | Reason |
+|-----------|-------------|--------|
+| `GetByIdAsync` | `readDb` | Read-only query |
+| `QueryAsync` | `readDb` | Paginated read query |
+| `GetNamesAsync` | `readDb` | Read-only projection |
+| `GetBankDetailAsync` | `readDb` | Read-only lookup |
+| `GetHolidaysAsync` | `readDb` | Paginated read query |
+| `GetPharmacyToInsertAsync` | `readDb` | Read-only projection |
+| `CheckPharmacyToInsertGlobalDrugAsync` | `readDb` | Existence check only |
+| `CreateAsync` | `db` | Insert + `SaveChangesAsync` |
+| `UpdateAsync` | `db` | Fetch for update + `SaveChangesAsync` |
+| `UpdateConfigAsync` | `db` | Fetch for update + `SaveChangesAsync` |
+| `UpdateAttachmentAsync` | `db` | Fetch for update + `SaveChangesAsync` |
+| `SaveBankDetailAsync` | `db` (existence check on `db`) | Upsert + `SaveChangesAsync` |
+| `SaveHolidayAsync` | `db` | Upsert + `SaveChangesAsync` |
+| `DeleteHolidayAsync` | `db` | Remove + `SaveChangesAsync` |
+
+#### Adding DbContexts to a New Service
+
+1. Create `Data/{X}DbContext.cs` inheriting `BestMedDbContext`.
+2. Create `Data/ReadOnly{X}DbContext.cs` inheriting `BestMedReadOnlyDbContext`.
+3. Register both in `ServiceRegistration.cs`:
+
+   ```csharp
+   builder.AddSqlServerDbContext<MyNewDbContext>("mynewdb");
+   builder.AddSqlServerDbContext<ReadOnlyMyNewDbContext>("mynewreaddb");
+   ```
+
+4. Inject both into the concrete service constructor (write context first, read context second by convention).
 
 ---
 
