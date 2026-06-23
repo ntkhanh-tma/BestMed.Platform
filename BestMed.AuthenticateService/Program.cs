@@ -14,5 +14,9 @@ app.UseAuthorization();
 
 app.MapDefaultEndpoints();
 app.MapAuthEndpoints();
+app.MapSsoEndpoints();
+app.MapPasswordEndpoints();
+app.MapSessionEndpoints();
+app.MapSupportEndpoints();
 
 await app.RunAsync();

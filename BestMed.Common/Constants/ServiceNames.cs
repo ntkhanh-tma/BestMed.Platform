@@ -14,6 +14,7 @@ public static class ServiceNames
     public const string WarehouseService = "warehouse-service";
     public const string PharmacyService = "pharmacy-service";
     public const string FacilityService = "facility-service";
+    public const string ResidentService = "resident-service";
     public const string Gateway = "gateway";
     public const string ServiceBus = "servicebus";
 
@@ -37,6 +38,8 @@ public static class ServiceNames
         public const string PharmacyDbReadOnly = "pharmacydb-readonly";
         public const string FacilityDb = "facilitydb";
         public const string FacilityDbReadOnly = "facilitydb-readonly";
+        public const string ResidentDb = "residentdb";
+        public const string ResidentDbReadOnly = "residentdb-readonly";
     }
 
     // ── Database schema script paths (relative to solution root) ─────────────
@@ -49,6 +52,7 @@ public static class ServiceNames
         public const string Warehouses = "database/warehouses/001_InitialSchema.sql";
         public const string Pharmacies = "database/pharmacies/001_InitialSchema.sql";
         public const string Facilities = "database/facilities/001_InitialSchema.sql";
+        public const string Residents = "database/residents/001_InitialSchema.sql";
     }
 
     // ── Service Bus topics ───────────────────────────────────────────────────
@@ -60,6 +64,7 @@ public static class ServiceNames
         public const string WarehouseUpdated = "bmp-warehouse-updated";
         public const string PharmacyUpdated = "bmp-pharmacy-updated";
         public const string FacilityUpdated = "bmp-facility-updated";
+        public const string ResidentUpdated = "bmp-resident-updated";
     }
 
     // ── Service Bus subscriptions ────────────────────────────────────────────

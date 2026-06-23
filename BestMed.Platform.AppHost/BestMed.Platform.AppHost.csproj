@@ -18,10 +18,14 @@
     <ProjectReference Include="..\BestMed.WarehouseService\BestMed.WarehouseService.csproj" />
     <ProjectReference Include="..\BestMed.PharmacyService\BestMed.PharmacyService.csproj" />
     <ProjectReference Include="..\BestMed.FacilityService\BestMed.FacilityService.csproj" />
+    <ProjectReference Include="..\BestMed.ResidentService\BestMed.ResidentService.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Azure.ServiceBus" Version="13.1.0" />
+    <!-- Pin patched version to resolve GHSA-hv8m-jj95-wg3x (transitive via KubernetesClient) -->
+    <PackageReference Include="MessagePack" Version="2.5.302" />
+    <PackageReference Include="MessagePack.Annotations" Version="2.5.302" />
   </ItemGroup>
 
 </Project>

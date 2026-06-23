@@ -3,6 +3,8 @@
     <Project Path="BestMed.Platform.AppHost/BestMed.Platform.AppHost.csproj" />
   </Folder>
   <Folder Name="/Documents/">
+    <File Path="../BESThealth/source/main/docs/microservice-migration-authenticate-controller.md" />
+    <File Path="../BESThealth/source/main/docs/microservice-migration-resident-controller.md" />
     <File Path="../BESThealth/source/main/Neutron.Business/WarehouseBusiness.cs" />
     <File Path="../BESThealth/source/main/Neutron.WebApp/Areas/BESTpack/Controllers/WarehouseController.cs" />
     <File Path="facility.md" />
@@ -15,6 +17,7 @@
     <Project Path="BestMed.Gateway/BestMed.Gateway.csproj" />
     <Project Path="BestMed.PharmacyService/BestMed.PharmacyService.csproj" />
     <Project Path="BestMed.PrescriberService/BestMed.PrescriberService.csproj" />
+    <Project Path="BestMed.ResidentService/BestMed.ResidentService.csproj" />
     <Project Path="BestMed.RoleService/BestMed.RoleService.csproj" />
     <Project Path="BestMed.UserService/BestMed.UserService.csproj" />
     <Project Path="BestMed.WarehouseService/BestMed.WarehouseService.csproj" />

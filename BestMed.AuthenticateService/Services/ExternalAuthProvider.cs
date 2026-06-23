@@ -116,6 +116,24 @@ public sealed class ExternalAuthProvider(
         };
     }
 
+    public async Task<string> GetClientCredentialsTokenRawAsync(IFormCollection form, CancellationToken cancellationToken = default)
+    {
+        logger.LogInformation("Proxying client credentials grant to Identity Server");
+
+        var formData = form.ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
+        var response = await httpClient.PostAsync("/connect/token", new FormUrlEncodedContent(formData), cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Identity Server client credentials grant failed: {StatusCode}", response.StatusCode);
+            throw new HttpRequestException(body, null, response.StatusCode);
+        }
+
+        return body;
+    }
+
     private sealed class IdentityTokenResponse
     {
         public required string AccessToken { get; init; }
